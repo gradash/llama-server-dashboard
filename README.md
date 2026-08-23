@@ -1,39 +1,14 @@
 # ⚡ llama-server-dashboard
 
-> A lightweight, zero-dependency, real-time terminal dashboard and monitor for `llama-server` (`llama.cpp`) with live **GPU VRAM partitioning**, **CPU RAM offload detection**, token throughput counters, and formatted event logging.
+> A lightweight, zero-dependency, real-time visual terminal dashboard and monitor for `llama-server` (`llama.cpp`) with live **GPU VRAM partitioning**, **CPU RAM offload detection**, token throughput counters, and formatted event logging.
 
 ---
 
-## 📸 ASCII Preview
+## 📸 Live Terminal Preview
 
-```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                     * QWEN 2.5 CODER 7B (LLAMA-SERVER DASHBOARD) *                     │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  Server Status:    [READY (IDLE)]                       Uptime: 08:24                  │
-│  Model:            Qwen 2.5 Coder 7B Instruct (Q4_K_M)                                 │
-│  API Endpoint:     http://127.0.0.1:8080/v1                                            │
-│  Configuration:    65,536 tokens  |  Cache: Q8_0  |  Flash-Attn: ON                    │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  [VRAM & SYSTEM RAM METRICS]                                                           │
-│  ├─ GPU Memory (VRAM):    [==================..]  7.80 / 8.0 GB (97.5%)                │
-│     └─ Model: 5.56 GB  |  Windows/System: 2.24 GB                                      │
-│  ├─ CPU RAM Spillover:    0.00 GB  [100% IN VRAM, NO OFFLOAD]                          │
-│  ├─ Server RAM (llama):   ~5.24 GB (Vulkan host buffer)                                │
-│  └─ Dashboard RAM (Py):   30.4 MB (lightweight UI monitor)                             │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  [CONTEXT ACTIVITY & THROUGHPUT]                                                       │
-│  ├─ Context Occupied:     [====................]  12,291 / 65,536 (18.8%)              │
-│  └─ Response Speed:       Generation: 43.8 tok/s  |  Prompt: 146.2 tok/s               │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  [LIVE SERVER EVENT LOGS]                                                              │
-│  > HTTP server listening on http://127.0.0.1:8080                                      │
-│  > slot 0 | task 359 | prompt processing: 146.19 tokens per second                     │
-│  > slot 0 | task 359 | n_gen = 280, tg = 43.85 t/s                                     │
-│  > slot 0 | all slots are idle                                                         │
-└────────────────────────────────────────────────────────────────────────────────────────┘
- [Press 'Q', 'Esc' or 'Ctrl+C' to cleanly stop the server]
-```
+<p align="center">
+  <img src="assets/preview.svg" alt="llama-server live dashboard preview" width="850">
+</p>
 
 ---
 
