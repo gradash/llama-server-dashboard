@@ -22,7 +22,7 @@
 * ⚙️ **Dual-Process RAM Tracking:** Separately displays `llama-server` process footprint (e.g. Vulkan host-visible staging buffer) and the dashboard's own tiny Python runtime (~30 MB).
 * ⚡ **Live Throughput Counters:** Real-time token generation speed (`tg tok/s`) and prompt evaluation speed (`prompt tok/s`).
 * 🛑 **Bulletproof Clean Exit:** Uses Windows Native Console Control Handlers (`SetConsoleCtrlHandler`) and non-blocking key polling — gracefully terminates both the dashboard and `llama-server.exe` on `Q`, `Esc`, or `Ctrl+C`.
-* 📦 **Universal GGUF Compatibility:** Works out of the box with any model (Qwen, DeepSeek, Llama, Mistral, Gemma, etc.) by passing the model path as a CLI argument.
+* 🎛️ **Full `llama.cpp` CLI Passthrough:** Supports **any arbitrary parameter** accepted by `llama-server` (`--temp`, `-ngl`, `--threads`, `--jinja`, `--alias`, etc.).
 * 🪶 **Zero Dependencies:** Pure Python 3 (Standard library only: `ctypes`, `subprocess`, `urllib`, `re`, `msvcrt`). No `pip install` or external packages required.
 
 ---
@@ -35,26 +35,46 @@
 * **Backend:** `llama-server.exe` from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
 * Any GGUF model file (e.g. `qwen2.5-coder-7b-instruct-q4_k_m.gguf`)
 
-### Usage
+---
 
-#### 1. Quick Launch (Default Model)
+## 💻 Usage & Command Line Options
+
+The dashboard supports three convenient ways to launch:
+
+### 1. Zero-Config Launch (Best-Practice Defaults)
+Starts with the default model, 65k context, Q8 KV-cache, and Flash Attention:
 ```cmd
 python dashboard.py
 ```
 
-#### 2. Launch with Custom Parameters
+### 2. Positional Shorthand
+Quickly override model, context size, and port without typing flags:
 ```cmd
 python dashboard.py path/to/model.gguf <context_length> <port>
 ```
-
-Example:
+*Example:*
 ```cmd
 python dashboard.py models/DeepSeek-R1-Distill-Qwen-7B-Q8_0.gguf 131072 8080
 ```
 
-* `Arg 1`: Path to GGUF model (default: `qwen2.5-coder-7b-instruct-q4_k_m.gguf`)
-* `Arg 2`: Context window size in tokens (default: `65536`)
-* `Arg 3`: HTTP API port (default: `8080`)
+### 3. Full Native `llama-server` CLI Flags & Passthrough
+Pass **any parameter supported by `llama-server.exe`**. Custom flags seamlessly override defaults and are passed directly to the engine:
+```cmd
+python dashboard.py -m models/Qwen2.5-Coder-7B-Instruct-Q8_0.gguf -c 131072 -ngl 33 -t 8 --temp 0.2 --jinja --alias my-coder-model
+```
+
+#### Commonly used parameters:
+| Parameter | Description | Default |
+| :--- | :--- | :--- |
+| `-m`, `--model` | Path to GGUF model file | `qwen2.5-coder-7b-instruct-q4_k_m.gguf` |
+| `-c`, `--ctx-size` | Context window size in tokens | `65536` |
+| `-ngl`, `--gpu-layers` | Number of layers to offload to GPU | `99` (all layers) |
+| `-ctk`, `-ctv` | KV cache quantization (`q8_0`, `q4_0`, `f16`) | `q8_0` |
+| `-fa`, `--flash-attn` | Flash Attention mode (`on`, `off`, `auto`) | `on` |
+| `-t`, `--threads` | Number of CPU threads | `6` |
+| `-b`, `-ub` | Batch and micro-batch sizes | `-b 2048 -ub 1024` |
+| `--port` | HTTP server port | `8080` |
+| *Any other flag* | Forwarded directly to `llama-server.exe` | — |
 
 ---
 

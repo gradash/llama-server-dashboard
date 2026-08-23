@@ -19,11 +19,133 @@ os.system('')
 TOTAL_VRAM_GB = 8.0
 VULKAN_OVERHEAD_GB = 0.70
 
-# Default model settings (override via CLI: python dashboard.py [model_path] [context_size] [port])
-DEFAULT_MODEL_FILE = "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
-MODEL_FILE = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MODEL_FILE
-CONTEXT_LIMIT = int(sys.argv[2]) if len(sys.argv) > 2 else 65536
-PORT = int(sys.argv[3]) if len(sys.argv) > 3 else 8080
+def parse_cli_args(argv):
+    """
+    Universal Argument Parser:
+    1. Supports default zero-config launch
+    2. Supports positional shorthand: python dashboard.py [model] [context] [port]
+    3. Supports FULL native llama-server flags: python dashboard.py -m model.gguf -c 131072 -ngl 33 --temp 0.2 --jinja
+       (Any parameter supported by llama-server.exe can be passed and is forwarded directly!)
+    """
+    meta = {
+        "model_file": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+        "context_limit": 65536,
+        "port": 8080,
+        "ngl": "99",
+        "ctk": "q8_0",
+        "ctv": "q8_0",
+        "fa": "on",
+        "b": "2048",
+        "ub": "1024",
+        "t": "6",
+        "tb": "6",
+        "np": "1"
+    }
+
+    passthrough_args = []
+    
+    if argv and not argv[0].startswith('-'):
+        # Positional shorthand mode
+        if len(argv) >= 1:
+            meta["model_file"] = argv[0]
+        if len(argv) >= 2:
+            try:
+                meta["context_limit"] = int(argv[1])
+            except ValueError:
+                pass
+        if len(argv) >= 3:
+            try:
+                meta["port"] = int(argv[2])
+            except ValueError:
+                pass
+        passthrough_args = argv[3:]
+    else:
+        # Full native flag mode
+        i = 0
+        while i < len(argv):
+            arg = argv[i]
+            val = argv[i+1] if (i + 1 < len(argv) and not argv[i+1].startswith('-')) else None
+            
+            if arg in ('-m', '--model') and val:
+                meta["model_file"] = val
+                i += 2
+                continue
+            elif arg in ('-c', '--ctx-size') and val:
+                try:
+                    meta["context_limit"] = int(val)
+                except ValueError:
+                    pass
+                i += 2
+                continue
+            elif arg in ('--port',) and val:
+                try:
+                    meta["port"] = int(val)
+                except ValueError:
+                    pass
+                i += 2
+                continue
+            elif arg in ('-ngl', '--n-gpu-layers', '--gpu-layers') and val:
+                meta["ngl"] = val
+                i += 2
+                continue
+            elif arg in ('-ctk', '--cache-type-k') and val:
+                meta["ctk"] = val
+                i += 2
+                continue
+            elif arg in ('-ctv', '--cache-type-v') and val:
+                meta["ctv"] = val
+                i += 2
+                continue
+            elif arg in ('-t', '--threads') and val:
+                meta["t"] = val
+                i += 2
+                continue
+            elif arg in ('-tb', '--threads-batch') and val:
+                meta["tb"] = val
+                i += 2
+                continue
+            elif arg in ('-b', '--batch-size') and val:
+                meta["b"] = val
+                i += 2
+                continue
+            elif arg in ('-ub', '--ubatch-size') and val:
+                meta["ub"] = val
+                i += 2
+                continue
+            elif arg in ('-fa', '--flash-attn') and val:
+                meta["fa"] = val
+                i += 2
+                continue
+            else:
+                passthrough_args.append(arg)
+                i += 1
+
+    cmd = [
+        "llama-server.exe",
+        "-m", meta["model_file"],
+        "-ngl", str(meta["ngl"]),
+        "-c", str(meta["context_limit"]),
+        "-ctk", meta["ctk"],
+        "-ctv", meta["ctv"],
+        "-fa", meta["fa"],
+        "-b", str(meta["b"]),
+        "-ub", str(meta["ub"]),
+        "-t", str(meta["t"]),
+        "-tb", str(meta["tb"]),
+        "-np", str(meta["np"]),
+        "--cache-prompt",
+        "--host", "127.0.0.1",
+        "--port", str(meta["port"])
+    ]
+    cmd.extend(passthrough_args)
+    return meta, cmd
+
+# Parse CLI
+CLI_META, SERVER_CMD = parse_cli_args(sys.argv[1:])
+
+MODEL_FILE = CLI_META["model_file"]
+CONTEXT_LIMIT = CLI_META["context_limit"]
+PORT = CLI_META["port"]
 
 # Clean model name for display
 clean_name = os.path.splitext(os.path.basename(MODEL_FILE))[0]
@@ -80,7 +202,6 @@ def shutdown_server():
 PHANDLER_ROUTINE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
 
 def win_ctrl_handler(ctrl_type):
-    # 0 = CTRL_C_EVENT, 1 = CTRL_BREAK_EVENT, 2 = CTRL_CLOSE_EVENT
     shutdown_server()
     return True
 
@@ -158,7 +279,6 @@ def gpu_vram_poller():
             time.sleep(0.1)
 
 def make_stacked_vram_bar(model_gb, total_used_gb, max_gb=8.0, length=20):
-    """Generate multi-color stacked bar: Cyan for model, Yellow for OS/apps, Gray for empty."""
     model_gb = min(model_gb, max_gb)
     other_gb = max(0.0, min(total_used_gb - model_gb, max_gb - model_gb))
     
@@ -193,28 +313,11 @@ def main():
     global server_proc, running, last_prompt_speed, last_gen_speed, real_total_vram_gb
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    server_cmd = [
-        "llama-server.exe",
-        "-m", MODEL_FILE,
-        "-ngl", "99",
-        "-c", str(CONTEXT_LIMIT),
-        "-ctk", "q8_0",
-        "-ctv", "q8_0",
-        "-fa", "on",
-        "-b", "2048",
-        "-ub", "1024",
-        "-t", "6",
-        "-tb", "6",
-        "-np", "1",
-        "--cache-prompt",
-        "--host", "127.0.0.1",
-        "--port", str(PORT)
-    ]
-
     print(f"{C_BOLD}{C_CYAN}Launching {MODEL_NAME} and initializing live dashboard...{C_RESET}")
+    print(f"{C_GRAY}Command: {' '.join(SERVER_CMD)}{C_RESET}")
     try:
         server_proc = subprocess.Popen(
-            server_cmd,
+            SERVER_CMD,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             bufsize=1
@@ -237,7 +340,6 @@ def main():
     my_pid = os.getpid()
 
     while running:
-        # Check keyboard press (q, Esc, Ctrl+C)
         while msvcrt.kbhit():
             ch = msvcrt.getch()
             if ch in (b'q', b'Q', b'\x1b', b'\x03'):
@@ -304,7 +406,7 @@ def main():
         print(render_row(f"{C_BOLD}Server Status:{C_RESET}    {status_badge}     {C_BOLD}Uptime:{C_RESET} {uptime_str}", INNER_WIDTH))
         print(render_row(f"{C_BOLD}Model:{C_RESET}            {C_CYAN}{MODEL_NAME}{C_RESET}", INNER_WIDTH))
         print(render_row(f"{C_BOLD}API Endpoint:{C_RESET}     {C_GREEN}http://127.0.0.1:{PORT}/v1{C_RESET}", INNER_WIDTH))
-        print(render_row(f"{C_BOLD}Configuration:{C_RESET}    {CONTEXT_LIMIT:,} tokens  |  Cache: Q8_0  |  Flash-Attn: ON", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}Configuration:{C_RESET}    {CONTEXT_LIMIT:,} tokens  |  Cache: {CLI_META['ctk']}  |  Flash-Attn: {CLI_META['fa']}", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
         # Memory Section (Stacked + Self RAM)
