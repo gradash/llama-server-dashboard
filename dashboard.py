@@ -10,6 +10,7 @@ import re
 import unicodedata
 import msvcrt
 import ctypes
+import datetime
 from ctypes import wintypes
 from collections import deque
 
@@ -89,7 +90,6 @@ def parse_cli_args(argv):
     1. Supports default zero-config launch
     2. Supports positional shorthand: python dashboard.py [model] [context] [port]
     3. Supports FULL native llama-server flags: python dashboard.py -m model.gguf -c 131072 -ngl 33 --temp 0.2 --jinja
-       (Any parameter supported by llama-server.exe can be passed and is forwarded directly!)
     """
     meta = {
         "model_file": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
@@ -237,7 +237,8 @@ C_BLUE = "\033[94m"
 C_GRAY = "\033[90m"
 C_MAGENTA = "\033[95m"
 
-logs_deque = deque(maxlen=8)
+# Human-readable event history (max 8 entries)
+events_deque = deque(maxlen=8)
 server_proc = None
 running = True
 
@@ -245,6 +246,57 @@ running = True
 last_prompt_speed = 0.0
 last_gen_speed = 0.0
 real_total_vram_gb = min(7.75, TOTAL_VRAM_GB * 0.95)
+
+def format_llama_log_to_human_event(raw_line):
+    """
+    Parses noisy raw llama-server internal debug lines into clean, informative activity cards.
+    """
+    now_str = datetime.datetime.now().strftime("%H:%M:%S")
+    
+    if "HTTP server listening on" in raw_line:
+        m = re.search(r'http://[^\s]+', raw_line)
+        url = m.group(0) if m else f"http://127.0.0.1:{PORT}"
+        return f"{C_GREEN}●{C_RESET} {C_GRAY}[{now_str}]{C_RESET} {C_BOLD}{C_GREEN}Server Ready:{C_RESET} Listening on {C_CYAN}{url}{C_RESET}"
+    
+    if "prompt processing" in raw_line:
+        m_tok = re.search(r'n_tokens\s*=\s*(\d+)', raw_line)
+        m_spd = re.search(r'(\d+(?:\.\d+)?)\s*tokens per second', raw_line)
+        tok = f"{int(m_tok.group(1)):,}" if m_tok else "—"
+        spd = m_spd.group(1) if m_spd else "—"
+        return f"{C_CYAN}●{C_RESET} {C_GRAY}[{now_str}]{C_RESET} {C_BOLD}{C_CYAN}Prompt Processing:{C_RESET} {tok} tokens @ {C_CYAN}{spd} tok/s{C_RESET}"
+        
+    if "prompt eval time =" in raw_line:
+        m_tok = re.search(r'/\s*(\d+)\s*tokens', raw_line)
+        m_spd = re.search(r'(\d+(?:\.\d+)?)\s*tokens per second', raw_line)
+        tok = f"{int(m_tok.group(1)):,}" if m_tok else "—"
+        spd = m_spd.group(1) if m_spd else "—"
+        return f"{C_CYAN}●{C_RESET} {C_GRAY}[{now_str}]{C_RESET} {C_BOLD}{C_CYAN}Prompt Evaluated:{C_RESET} {tok} tokens @ {C_CYAN}{spd} tok/s{C_RESET}"
+
+    if "eval time =" in raw_line and "prompt" not in raw_line:
+        m_tok = re.search(r'/\s*(\d+)\s*tokens', raw_line)
+        m_spd = re.search(r'(\d+(?:\.\d+)?)\s*tokens per second', raw_line)
+        m_ms = re.search(r'eval time\s*=\s*([\d\.]+)\s*ms', raw_line)
+        tok = f"{int(m_tok.group(1)):,}" if m_tok else "—"
+        spd = m_spd.group(1) if m_spd else "—"
+        sec = f"{float(m_ms.group(1))/1000.0:.1f}s" if m_ms else "—"
+        return f"{C_GREEN}●{C_RESET} {C_GRAY}[{now_str}]{C_RESET} {C_BOLD}{C_GREEN}Generated Output:{C_RESET} {tok} tokens @ {C_GREEN}{spd} tok/s{C_RESET} in {C_YELLOW}{sec}{C_RESET}"
+
+    if "launch_slot_" in raw_line or "processing task" in raw_line:
+        m_task = re.search(r'task\s+(\d+)', raw_line)
+        task_id = m_task.group(1) if m_task else "?"
+        return f"{C_YELLOW}●{C_RESET} {C_GRAY}[{now_str}]{C_RESET} {C_BOLD}{C_YELLOW}Task #{task_id} Started:{C_RESET} Slot 0 processing request..."
+
+    if "stop processing" in raw_line or "release:" in raw_line:
+        m_task = re.search(r'task\s+(\d+)', raw_line)
+        task_id = m_task.group(1) if m_task else "?"
+        return f"{C_GRAY}● [{now_str}] Task #{task_id} Completed: Slot returned to idle{C_RESET}"
+
+    # General important error/warning notices
+    if "error" in raw_line.lower() and not "unavailable_error" in raw_line:
+        clean = raw_line.replace("\r", "")
+        return f"{C_RED}✖ [{now_str}] Notice: {clean[:65]}{C_RESET}"
+
+    return None
 
 def shutdown_server():
     global server_proc, running
@@ -299,6 +351,7 @@ def log_reader(proc):
         if not raw_text:
             continue
 
+        # Extract speed metrics
         if "prompt processing" in raw_text or "prompt eval" in raw_text:
             m = re.search(r'(\d+(?:\.\d+)?)\s*(?:tokens per second|t/s|tok/s)', raw_text)
             if m:
@@ -321,15 +374,14 @@ def log_reader(proc):
                 except Exception:
                     pass
 
-        clean = raw_text
-        if len(clean) > 80:
-            clean = clean[:77] + "..."
-        logs_deque.append(clean)
+        # Convert to clean human event
+        event = format_llama_log_to_human_event(raw_text)
+        if event:
+            events_deque.append(event)
 
 def gpu_vram_poller():
     global running, real_total_vram_gb, IS_NVIDIA, TOTAL_VRAM_GB
     while running:
-        # Fast NVIDIA polling via nvidia-smi
         if IS_NVIDIA:
             try:
                 res = subprocess.run(
@@ -342,7 +394,6 @@ def gpu_vram_poller():
             except Exception:
                 pass
         else:
-            # AMD / Intel via Windows Performance Counters
             try:
                 cmd = "powershell.exe -NoProfile -Command \"(Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum\""
                 out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore').strip()
@@ -393,7 +444,6 @@ def main():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     print(f"{C_BOLD}{C_CYAN}Launching {MODEL_NAME} on {GPU_NAME} ({TOTAL_VRAM_GB} GB VRAM)...{C_RESET}")
-    print(f"{C_GRAY}Command: {' '.join(SERVER_CMD)}{C_RESET}")
     try:
         server_proc = subprocess.Popen(
             SERVER_CMD,
@@ -417,6 +467,9 @@ def main():
     is_processing = False
     INNER_WIDTH = 84
     my_pid = os.getpid()
+
+    # Initial event
+    events_deque.append(f"{C_CYAN}● [{datetime.datetime.now().strftime('%H:%M:%S')}] Server Process Started: PID {server_proc.pid}{C_RESET}")
 
     while running:
         while msvcrt.kbhit():
@@ -511,15 +564,15 @@ def main():
         print(render_row(f"  └─ ⚡ {C_BOLD}Response Speed:{C_RESET}      {speed_text}", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
-        # Logs Section
-        print(render_row(f"{C_BOLD}📜 LIVE SERVER EVENT LOGS:{C_RESET}", INNER_WIDTH))
-        recent = list(logs_deque)[-6:]
+        # Structured Activity History Section
+        print(render_row(f"{C_BOLD}📋 RECENT TASKS & SERVER ACTIVITY:{C_RESET}", INNER_WIDTH))
+        recent_events = list(events_deque)[-6:]
         for idx in range(6):
-            if idx < len(recent):
-                log_line = recent[idx].replace("\r", "")
-                print(render_row(f"  {C_GRAY}>{C_RESET} {log_line}", INNER_WIDTH))
+            if idx < len(recent_events):
+                ev_str = recent_events[idx]
+                print(render_row(f"  {ev_str}", INNER_WIDTH))
             else:
-                print(render_row("", INNER_WIDTH))
+                print(render_row(f"  {C_GRAY}— Waiting for next task...{C_RESET}", INNER_WIDTH))
 
         # Bottom border
         print(f"{C_CYAN}└{'─' * (INNER_WIDTH + 2)}┘{C_RESET}")

@@ -49,11 +49,11 @@
     <text x="20" y="79" class="c-label">Model:</text>
     <text x="145" y="79" class="c-cyan">Qwen 2.5 Coder 7B Instruct (Q4_K_M)</text>
 
-    <text x="20" y="100" class="c-label">API Endpoint:</text>
-    <text x="145" y="100" class="c-green">http://127.0.0.1:8080/v1</text>
+    <text x="20" y="100" class="c-label">GPU Hardware:</text>
+    <text x="145" y="100" class="c-green">AMD Radeon RX 5700 XT <tspan class="c-dim">(AMD Vulkan, 8.0 GB VRAM)</tspan></text>
 
-    <text x="20" y="121" class="c-label">Configuration:</text>
-    <text x="145" y="121" class="c-white">65,536 tokens  |  Cache: Q8_0  |  Flash-Attn: ON</text>
+    <text x="20" y="121" class="c-label">API Endpoint:</text>
+    <text x="145" y="121" class="c-green">http://127.0.0.1:8080/v1</text>
 
     <line x1="0" y1="134" x2="790" y2="134" class="div-line" />
 
@@ -101,13 +101,13 @@
     <text x="430" y="318" class="c-white">12,291 / 65,536 (18.8%)</text>
 
     <text x="35" y="340" class="c-white">└─ ⚡ <tspan class="c-label">Response Speed:</tspan></text>
-    <text x="235" y="340" class="c-white">Generation: <tspan class="c-green">43.8 tok/s</tspan>  <tspan class="c-gray">|</tspan>  Prompt: <tspan class="c-cyan">146.2 tok/s</tspan></text>
+    <text x="235" y="340" class="c-white">Generation: <tspan class="c-green">61.9 tok/s</tspan>  <tspan class="c-gray">|</tspan>  Prompt: <tspan class="c-cyan">160.0 tok/s</tspan></text>
 
     <line x1="0" y1="354" x2="790" y2="354" class="div-line" />
 
-    <!-- Section 4: Live Event Logs -->
-    <text x="20" y="376" class="c-label">📜 LIVE SERVER EVENT LOGS:</text>
-    <text x="35" y="396" class="c-gray">&gt; HTTP server listening on http://127.0.0.1:8080</text>
-    <text x="35" y="413" class="c-gray">&gt; slot 0 | task 359 | prompt processing: 146.19 tokens per second</text>
+    <!-- Section 4: Structured Task Activity History -->
+    <text x="20" y="376" class="c-label">📋 RECENT TASKS &amp; SERVER ACTIVITY:</text>
+    <text x="35" y="396" class="c-green">● <tspan class="c-gray">[17:24:18]</tspan> Generated Output: <tspan class="c-white">441 tokens</tspan> @ 61.9 tok/s in 7.1s</text>
+    <text x="35" y="414" class="c-cyan">● <tspan class="c-gray">[17:24:05]</tspan> Prompt Completed: <tspan class="c-white">8,195 tokens</tspan> @ 160.0 tok/s</text>
   </g>
 </svg>
