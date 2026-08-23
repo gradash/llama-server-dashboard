@@ -1,6 +1,6 @@
 # ⚡ llama-server-dashboard
 
-> A lightweight, zero-dependency, real-time visual terminal dashboard and monitor for `llama-server` (`llama.cpp`) with live **GPU VRAM partitioning**, **CPU RAM offload detection**, token throughput counters, and formatted event logging.
+> A lightweight, zero-dependency, real-time visual terminal dashboard and monitor for `llama-server` (`llama.cpp`) with live **multi-vendor GPU VRAM partitioning** (NVIDIA CUDA / AMD Radeon / Intel Arc), **CPU RAM offload detection**, token throughput counters, and formatted event logging.
 
 ---
 
@@ -14,12 +14,15 @@
 
 ## ✨ Key Features
 
-* 🎮 **Stacked Multi-Color VRAM Gauge:** Visually distinguishes memory allocation:
+* 🎮 **Multi-Vendor GPU Support (NVIDIA / AMD / Intel):**
+  * **NVIDIA CUDA:** High-performance direct polling via `nvidia-smi` (<20ms).
+  * **AMD Radeon & Intel Arc:** Windows Performance Counter integration with automatic VRAM capacity detection.
+* 📊 **Stacked Multi-Color VRAM Gauge:** Visually distinguishes memory allocation:
   * 🟦 **Cyan:** Memory occupied strictly by the Model weights and active KV-Cache.
   * 🟨 **Yellow:** Memory consumed by Windows DWM, Desktop, browsers, and background apps.
   * ░ **Gray:** Remaining unallocated GPU VRAM headroom.
 * 🧠 **Zero-Spillover Detection:** Monitors whether all layers are running 100% in VRAM or spilling into system RAM.
-* ⚙️ **Dual-Process RAM Tracking:** Separately displays `llama-server` process footprint (e.g. Vulkan host-visible staging buffer) and the dashboard's own tiny Python runtime (~30 MB).
+* ⚙️ **Dual-Process RAM Tracking:** Separately displays `llama-server` process footprint (CUDA runtime or Vulkan staging buffer) and the dashboard's own tiny Python runtime (~30 MB).
 * ⚡ **Live Throughput Counters:** Real-time token generation speed (`tg tok/s`) and prompt evaluation speed (`prompt tok/s`).
 * 🛑 **Bulletproof Clean Exit:** Uses Windows Native Console Control Handlers (`SetConsoleCtrlHandler`) and non-blocking key polling — gracefully terminates both the dashboard and `llama-server.exe` on `Q`, `Esc`, or `Ctrl+C`.
 * 🎛️ **Full `llama.cpp` CLI Passthrough:** Supports **any arbitrary parameter** accepted by `llama-server` (`--temp`, `-ngl`, `--threads`, `--jinja`, `--alias`, etc.).
@@ -31,6 +34,7 @@
 
 ### Prerequisites
 * **OS:** Windows 10 / 11 (64-bit)
+* **GPU:** NVIDIA GeForce / RTX (CUDA), AMD Radeon (Vulkan), or Intel Arc
 * **Python:** Python 3.8+
 * **Backend:** `llama-server.exe` from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
 * Any GGUF model file (e.g. `qwen2.5-coder-7b-instruct-q4_k_m.gguf`)

@@ -16,8 +16,72 @@ from collections import deque
 # Enable ANSI escape sequences in Windows Terminal / CMD
 os.system('')
 
-TOTAL_VRAM_GB = 8.0
-VULKAN_OVERHEAD_GB = 0.70
+def detect_gpu_hardware():
+    """
+    Universal GPU & VRAM Detector:
+    Auto-detects NVIDIA (CUDA), AMD (Vulkan), and Intel GPUs with exact total VRAM capacity.
+    """
+    gpu_name = "Generic GPU"
+    total_vram_gb = 8.0
+    vendor_type = "AMD Vulkan"
+    is_nvidia = False
+
+    # 1. Try NVIDIA via nvidia-smi
+    try:
+        res = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=1.2
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            parts = res.stdout.strip().splitlines()[0].split(",")
+            gpu_name = parts[0].strip()
+            total_vram_gb = round(float(parts[1].strip()) / 1024.0, 1)
+            vendor_type = "NVIDIA CUDA"
+            is_nvidia = True
+            return gpu_name, total_vram_gb, vendor_type, is_nvidia
+    except Exception:
+        pass
+
+    # 2. Fallback to Windows CIM / Performance Counters for AMD & Intel
+    try:
+        cmd = "powershell.exe -NoProfile -Command \"$g = Get-CimInstance Win32_VideoController | Select-Object -First 1; Write-Output ($g.Name + '|' + $g.AdapterRAM)\""
+        out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL, timeout=2.0).decode('utf-8', errors='ignore').strip()
+        if "|" in out:
+            name, ram = out.split("|", 1)
+            gpu_name = name.strip()
+            name_u = gpu_name.upper()
+
+            if "NVIDIA" in name_u:
+                vendor_type = "NVIDIA"
+                is_nvidia = True
+            elif "AMD" in name_u or "RADEON" in name_u:
+                vendor_type = "AMD Vulkan"
+            elif "INTEL" in name_u:
+                vendor_type = "Intel"
+
+            # Check model heuristics for accurate VRAM capacity
+            if any(k in name_u for k in ("5700", "6600", "3060", "4060", "7600")):
+                total_vram_gb = 8.0
+            elif any(k in name_u for k in ("3070", "4070", "6700", "7700")):
+                total_vram_gb = 12.0
+            elif "3080" in name_u:
+                total_vram_gb = 10.0
+            elif any(k in name_u for k in ("6800", "6900", "7800", "7900 GRE", "4080")):
+                total_vram_gb = 16.0
+            elif any(k in name_u for k in ("7900", "3090", "4090")):
+                total_vram_gb = 24.0
+            else:
+                ram_val = float(ram) if ram.strip() else 0
+                if ram_val > 0:
+                    total_vram_gb = max(4.0, round(ram_val / (1024.0 ** 3), 1))
+    except Exception:
+        pass
+
+    return gpu_name, total_vram_gb, vendor_type, is_nvidia
+
+# Auto-detect hardware
+GPU_NAME, TOTAL_VRAM_GB, GPU_VENDOR, IS_NVIDIA = detect_gpu_hardware()
+VULKAN_OVERHEAD_GB = 0.70 if not IS_NVIDIA else 0.40
 
 def parse_cli_args(argv):
     """
@@ -180,7 +244,7 @@ running = True
 # Real-time metrics
 last_prompt_speed = 0.0
 last_gen_speed = 0.0
-real_total_vram_gb = 7.75
+real_total_vram_gb = min(7.75, TOTAL_VRAM_GB * 0.95)
 
 def shutdown_server():
     global server_proc, running
@@ -263,16 +327,31 @@ def log_reader(proc):
         logs_deque.append(clean)
 
 def gpu_vram_poller():
-    global running, real_total_vram_gb
+    global running, real_total_vram_gb, IS_NVIDIA, TOTAL_VRAM_GB
     while running:
-        try:
-            cmd = "powershell.exe -NoProfile -Command \"(Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum\""
-            out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore').strip()
-            if out:
-                bytes_val = float(out)
-                real_total_vram_gb = max(5.5, min(8.0, bytes_val / (1024.0 ** 3)))
-        except Exception:
-            pass
+        # Fast NVIDIA polling via nvidia-smi
+        if IS_NVIDIA:
+            try:
+                res = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=0.8
+                )
+                if res.returncode == 0 and res.stdout.strip():
+                    used_mb = float(res.stdout.strip().splitlines()[0])
+                    real_total_vram_gb = max(1.0, min(TOTAL_VRAM_GB, used_mb / 1024.0))
+            except Exception:
+                pass
+        else:
+            # AMD / Intel via Windows Performance Counters
+            try:
+                cmd = "powershell.exe -NoProfile -Command \"(Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum\""
+                out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore').strip()
+                if out:
+                    bytes_val = float(out)
+                    real_total_vram_gb = max(1.0, min(TOTAL_VRAM_GB, bytes_val / (1024.0 ** 3)))
+            except Exception:
+                pass
+
         for _ in range(25):
             if not running:
                 break
@@ -310,10 +389,10 @@ def get_process_ram_mb(pid):
     return 35.0
 
 def main():
-    global server_proc, running, last_prompt_speed, last_gen_speed, real_total_vram_gb
+    global server_proc, running, last_prompt_speed, last_gen_speed, real_total_vram_gb, GPU_NAME, TOTAL_VRAM_GB, GPU_VENDOR
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    print(f"{C_BOLD}{C_CYAN}Launching {MODEL_NAME} and initializing live dashboard...{C_RESET}")
+    print(f"{C_BOLD}{C_CYAN}Launching {MODEL_NAME} on {GPU_NAME} ({TOTAL_VRAM_GB} GB VRAM)...{C_RESET}")
     print(f"{C_GRAY}Command: {' '.join(SERVER_CMD)}{C_RESET}")
     try:
         server_proc = subprocess.Popen(
@@ -405,6 +484,7 @@ def main():
         # Server Info
         print(render_row(f"{C_BOLD}Server Status:{C_RESET}    {status_badge}     {C_BOLD}Uptime:{C_RESET} {uptime_str}", INNER_WIDTH))
         print(render_row(f"{C_BOLD}Model:{C_RESET}            {C_CYAN}{MODEL_NAME}{C_RESET}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}GPU Hardware:{C_RESET}     {C_GREEN}{GPU_NAME}{C_RESET} ({GPU_VENDOR}, {TOTAL_VRAM_GB} GB VRAM)", INNER_WIDTH))
         print(render_row(f"{C_BOLD}API Endpoint:{C_RESET}     {C_GREEN}http://127.0.0.1:{PORT}/v1{C_RESET}", INNER_WIDTH))
         print(render_row(f"{C_BOLD}Configuration:{C_RESET}    {CONTEXT_LIMIT:,} tokens  |  Cache: {CLI_META['ctk']}  |  Flash-Attn: {CLI_META['fa']}", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
@@ -415,7 +495,8 @@ def main():
         legend = f"     └─ {C_CYAN}■ Model:{C_RESET} {m_gb:.2f} GB  |  {C_YELLOW}■ Windows/System:{C_RESET} {o_gb:.2f} GB"
         print(render_row(legend, INNER_WIDTH))
         print(render_row(f"  ├─ 🧠 {C_BOLD}CPU RAM Spillover:{C_RESET}   {ram_spillover_status}", INNER_WIDTH))
-        print(render_row(f"  ├─ ⚙️  {C_BOLD}Server RAM (llama):{C_RESET}  ~{server_ram_gb:.2f} GB (Vulkan host buffer)", INNER_WIDTH))
+        server_ram_label = "Vulkan host buffer" if not IS_NVIDIA else "CUDA runtime buffer"
+        print(render_row(f"  ├─ ⚙️  {C_BOLD}Server RAM (llama):{C_RESET}  ~{server_ram_gb:.2f} GB ({server_ram_label})", INNER_WIDTH))
         print(render_row(f"  └─ 🐍 {C_BOLD}Dashboard RAM (Py):{C_RESET} {C_GREEN}{my_ram_mb:.1f} MB{C_RESET} (lightweight UI monitor)", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
