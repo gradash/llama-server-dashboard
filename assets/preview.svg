@@ -14,145 +14,100 @@
       .c-magenta { fill: #c084fc; font-weight: bold; }
       .c-gray { fill: #64748b; }
       .c-white { fill: #f8fafc; }
-      .c-bold { font-weight: bold; }
+      .c-label { fill: #f8fafc; font-weight: bold; }
+      .c-dim { fill: #94a3b8; }
+      .frame { fill: #0b1329; stroke: #0284c7; stroke-width: 1.5; rx: 6px; }
+      .div-line { stroke: #0284c7; stroke-width: 1; opacity: 0.85; }
     </style>
   </defs>
 
   <!-- Window Container -->
   <rect width="850" height="510" class="bg" stroke="#334155" stroke-width="1.5" />
   
-  <!-- Window Header -->
+  <!-- Window Header Bar -->
   <path d="M0,12 C0,5.37 5.37,0 12,0 L838,0 C844.63,0 850,5.37 850,12 L850,38 L0,38 Z" class="header-bar" />
   <circle cx="22" cy="19" r="6" class="dot-red" />
   <circle cx="42" cy="19" r="6" class="dot-yellow" />
   <circle cx="62" cy="19" r="6" class="dot-green" />
   <text x="425" y="24" text-anchor="middle" class="txt title">Qwen 2.5 Coder 7B - Live Terminal Dashboard</text>
 
-  <!-- Terminal Content -->
-  <g transform="translate(30, 64)" class="txt">
-    <!-- Box Top -->
-    <text y="0" class="c-cyan">┌──────────────────────────────────────────────────────────────────────────────┐</text>
+  <!-- Inner Terminal Frame -->
+  <g transform="translate(30, 58)" class="txt">
+    <!-- Box Frame (Pure Vector Rect - Immune to font mismatch) -->
+    <rect width="790" height="424" class="frame" />
     
-    <!-- Title -->
-    <text y="22" class="c-cyan">│</text>
-    <text x="145" y="22" class="c-cyan">⚡ QWEN 2.5 CODER 7B (LLAMA-SERVER DASHBOARD) ⚡</text>
-    <text x="765" y="22" class="c-cyan">│</text>
+    <!-- Header Title -->
+    <text x="395" y="24" text-anchor="middle" class="c-cyan">⚡ QWEN 2.5 CODER 7B (LLAMA-SERVER DASHBOARD) ⚡</text>
+    <line x1="0" y1="36" x2="790" y2="36" class="div-line" />
+
+    <!-- Section 1: Server Info -->
+    <text x="20" y="58" class="c-label">Server Status:</text>
+    <text x="145" y="58" class="c-green">● READY (IDLE)</text>
+    <text x="560" y="58" class="c-label">Uptime:</text>
+    <text x="625" y="58" class="c-white">08:24</text>
+
+    <text x="20" y="79" class="c-label">Model:</text>
+    <text x="145" y="79" class="c-cyan">Qwen 2.5 Coder 7B Instruct (Q4_K_M)</text>
+
+    <text x="20" y="100" class="c-label">API Endpoint:</text>
+    <text x="145" y="100" class="c-green">http://127.0.0.1:8080/v1</text>
+
+    <text x="20" y="121" class="c-label">Configuration:</text>
+    <text x="145" y="121" class="c-white">65,536 tokens  |  Cache: Q8_0  |  Flash-Attn: ON</text>
+
+    <line x1="0" y1="134" x2="790" y2="134" class="div-line" />
+
+    <!-- Section 2: VRAM & RAM -->
+    <text x="20" y="156" class="c-label">📊 VRAM &amp; SYSTEM RAM METRICS:</text>
     
-    <!-- Divider 1 -->
-    <text y="42" class="c-cyan">├──────────────────────────────────────────────────────────────────────────────┤</text>
-    
-    <!-- Server Status -->
-    <text y="62" class="c-cyan">│</text>
-    <text x="15" y="62" class="c-white c-bold">Server Status:</text>
-    <text x="145" y="62" class="c-green">● READY (IDLE)</text>
-    <text x="480" y="62" class="c-white c-bold">Uptime:</text>
-    <text x="545" y="62" class="c-white">08:24</text>
-    <text x="765" y="62" class="c-cyan">│</text>
-
-    <!-- Model -->
-    <text y="82" class="c-cyan">│</text>
-    <text x="15" y="82" class="c-white c-bold">Model:</text>
-    <text x="145" y="82" class="c-cyan">Qwen 2.5 Coder 7B Instruct (Q4_K_M)</text>
-    <text x="765" y="82" class="c-cyan">│</text>
-
-    <!-- API -->
-    <text y="102" class="c-cyan">│</text>
-    <text x="15" y="102" class="c-white c-bold">API Endpoint:</text>
-    <text x="145" y="102" class="c-green">http://127.0.0.1:8080/v1</text>
-    <text x="765" y="102" class="c-cyan">│</text>
-
-    <!-- Config -->
-    <text y="122" class="c-cyan">│</text>
-    <text x="15" y="122" class="c-white c-bold">Configuration:</text>
-    <text x="145" y="122" class="c-white">65,536 tokens  |  Cache: Q8_0  |  Flash-Attn: ON</text>
-    <text x="765" y="122" class="c-cyan">│</text>
-
-    <!-- Divider 2 -->
-    <text y="142" class="c-cyan">├──────────────────────────────────────────────────────────────────────────────┤</text>
-
-    <!-- Memory Header -->
-    <text y="162" class="c-cyan">│</text>
-    <text x="15" y="162" class="c-white c-bold">📊 VRAM &amp; SYSTEM RAM METRICS:</text>
-    <text x="765" y="162" class="c-cyan">│</text>
-
     <!-- VRAM Bar -->
-    <text y="182" class="c-cyan">│</text>
-    <text x="25" y="182" class="c-white">├─ 🎮 <tspan class="c-bold">GPU Memory (VRAM):</tspan></text>
-    <text x="235" y="182" class="c-cyan">██████████████</text>
-    <text x="347" y="182" class="c-yellow">█████</text>
-    <text x="387" y="182" class="c-gray">░░░</text>
-    <text x="420" y="182" class="c-white">7.80 / 8.0 GB (97.5%)</text>
-    <text x="765" y="182" class="c-cyan">│</text>
+    <text x="35" y="178" class="c-white">├─ 🎮 <tspan class="c-label">GPU Memory (VRAM):</tspan></text>
+    <!-- Vector Stacked Bar -->
+    <g transform="translate(235, 166)">
+      <rect width="180" height="14" rx="2" fill="#334155" />
+      <rect width="125" height="14" rx="2" fill="#38bdf8" />
+      <rect x="125" width="48" height="14" fill="#facc15" />
+    </g>
+    <text x="430" y="178" class="c-white">7.80 / 8.0 GB (97.5%)</text>
 
-    <!-- VRAM Legend -->
-    <text y="202" class="c-cyan">│</text>
-    <text x="50" y="202" class="c-cyan">■ Model:</text>
-    <text x="115" y="202" class="c-white">5.56 GB</text>
-    <text x="180" y="202" class="c-gray">|</text>
-    <text x="195" y="202" class="c-yellow">■ Windows/System:</text>
-    <text x="340" y="202" class="c-white">2.24 GB</text>
-    <text x="765" y="202" class="c-cyan">│</text>
+    <!-- VRAM Sub-legend -->
+    <text x="60" y="198" class="c-cyan">■ Model:</text>
+    <text x="125" y="198" class="c-white">5.56 GB</text>
+    <text x="190" y="198" class="c-gray">|</text>
+    <text x="205" y="198" class="c-yellow">■ Windows/System:</text>
+    <text x="350" y="198" class="c-white">2.24 GB</text>
 
-    <!-- RAM Spillover -->
-    <text y="222" class="c-cyan">│</text>
-    <text x="25" y="222" class="c-white">├─ 🧠 <tspan class="c-bold">CPU RAM Spillover:</tspan></text>
-    <text x="235" y="222" class="c-green">0.00 GB  [✅ 100% IN VRAM, NO OFFLOAD]</text>
-    <text x="765" y="222" class="c-cyan">│</text>
+    <text x="35" y="219" class="c-white">├─ 🧠 <tspan class="c-label">CPU RAM Spillover:</tspan></text>
+    <text x="235" y="219" class="c-green">0.00 GB  [✅ 100% IN VRAM, NO OFFLOAD]</text>
 
-    <!-- Server RAM -->
-    <text y="242" class="c-cyan">│</text>
-    <text x="25" y="242" class="c-white">├─ ⚙️  <tspan class="c-bold">Server RAM (llama):</tspan></text>
-    <text x="235" y="242" class="c-white">~5.24 GB (Vulkan host buffer)</text>
-    <text x="765" y="242" class="c-cyan">│</text>
+    <text x="35" y="240" class="c-white">├─ ⚙️  <tspan class="c-label">Server RAM (llama):</tspan></text>
+    <text x="235" y="240" class="c-white">~5.24 GB (Vulkan host buffer)</text>
 
-    <!-- Dashboard RAM -->
-    <text y="262" class="c-cyan">│</text>
-    <text x="25" y="262" class="c-white">└─ 🐍 <tspan class="c-bold">Dashboard RAM (Py):</tspan></text>
-    <text x="235" y="262" class="c-green">30.4 MB</text>
-    <text x="300" y="262" class="c-white">(lightweight UI monitor)</text>
-    <text x="765" y="262" class="c-cyan">│</text>
+    <text x="35" y="261" class="c-white">└─ 🐍 <tspan class="c-label">Dashboard RAM (Py):</tspan></text>
+    <text x="235" y="261" class="c-green">30.4 MB</text>
+    <text x="298" y="261" class="c-dim">(lightweight UI monitor)</text>
 
-    <!-- Divider 3 -->
-    <text y="282" class="c-cyan">├──────────────────────────────────────────────────────────────────────────────┤</text>
+    <line x1="0" y1="274" x2="790" y2="274" class="div-line" />
 
-    <!-- Context & Speed -->
-    <text y="302" class="c-cyan">│</text>
-    <text x="15" y="302" class="c-white c-bold">📈 CONTEXT ACTIVITY &amp; THROUGHPUT:</text>
-    <text x="765" y="302" class="c-cyan">│</text>
+    <!-- Section 3: Context & Throughput -->
+    <text x="20" y="296" class="c-label">📈 CONTEXT ACTIVITY &amp; THROUGHPUT:</text>
+    
+    <text x="35" y="318" class="c-white">├─ 🗂  <tspan class="c-label">Context Occupied:</tspan></text>
+    <!-- Context Vector Bar -->
+    <g transform="translate(235, 306)">
+      <rect width="180" height="14" rx="2" fill="#334155" />
+      <rect width="34" height="14" rx="2" fill="#4ade80" />
+    </g>
+    <text x="430" y="318" class="c-white">12,291 / 65,536 (18.8%)</text>
 
-    <text y="322" class="c-cyan">│</text>
-    <text x="25" y="322" class="c-white">├─ 🗂  <tspan class="c-bold">Context Occupied:</tspan></text>
-    <text x="235" y="322" class="c-green">████</text>
-    <text x="267" y="322" class="c-gray">░░░░░░░░░░░░░░░░</text>
-    <text x="420" y="322" class="c-white">12,291 / 65,536 (18.8%)</text>
-    <text x="765" y="322" class="c-cyan">│</text>
+    <text x="35" y="340" class="c-white">└─ ⚡ <tspan class="c-label">Response Speed:</tspan></text>
+    <text x="235" y="340" class="c-white">Generation: <tspan class="c-green">43.8 tok/s</tspan>  <tspan class="c-gray">|</tspan>  Prompt: <tspan class="c-cyan">146.2 tok/s</tspan></text>
 
-    <text y="342" class="c-cyan">│</text>
-    <text x="25" y="342" class="c-white">└─ ⚡ <tspan class="c-bold">Response Speed:</tspan></text>
-    <text x="235" y="342" class="c-white">Generation:</text>
-    <text x="320" y="342" class="c-green c-bold">43.8 tok/s</text>
-    <text x="405" y="342" class="c-gray">|</text>
-    <text x="420" y="342" class="c-white">Prompt:</text>
-    <text x="480" y="342" class="c-cyan c-bold">146.2 tok/s</text>
-    <text x="765" y="342" class="c-cyan">│</text>
+    <line x1="0" y1="354" x2="790" y2="354" class="div-line" />
 
-    <!-- Divider 4 -->
-    <text y="362" class="c-cyan">├──────────────────────────────────────────────────────────────────────────────┤</text>
-
-    <!-- Logs -->
-    <text y="382" class="c-cyan">│</text>
-    <text x="15" y="382" class="c-white c-bold">📜 LIVE SERVER EVENT LOGS:</text>
-    <text x="765" y="382" class="c-cyan">│</text>
-
-    <text y="400" class="c-cyan">│</text>
-    <text x="25" y="400" class="c-gray">&gt; HTTP server listening on http://127.0.0.1:8080</text>
-    <text x="765" y="400" class="c-cyan">│</text>
-
-    <text y="416" class="c-cyan">│</text>
-    <text x="25" y="416" class="c-gray">&gt; slot 0 | task 359 | prompt processing: 146.19 tokens per second</text>
-    <text x="765" y="416" class="c-cyan">│</text>
-
-    <!-- Box Bottom -->
-    <text y="432" class="c-cyan">└──────────────────────────────────────────────────────────────────────────────┘</text>
+    <!-- Section 4: Live Event Logs -->
+    <text x="20" y="376" class="c-label">📜 LIVE SERVER EVENT LOGS:</text>
+    <text x="35" y="396" class="c-gray">&gt; HTTP server listening on http://127.0.0.1:8080</text>
+    <text x="35" y="413" class="c-gray">&gt; slot 0 | task 359 | prompt processing: 146.19 tokens per second</text>
   </g>
 </svg>
