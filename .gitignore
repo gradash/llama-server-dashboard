@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Models and binaries (NEVER upload massive models to git)
+*.gguf
+*.bin
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Cache & slots
+cache_slots/
+*.log
+
+# Environments
+.env
+.venv
+env/
+venv/
