@@ -19,7 +19,7 @@ os.system('')
 TOTAL_VRAM_GB = 8.0
 VULKAN_OVERHEAD_GB = 0.70
 
-# Default model settings (override via sys.argv: python dashboard.py [model_path] [context_size] [port])
+# Default model settings (override via CLI: python dashboard.py [model_path] [context_size] [port])
 DEFAULT_MODEL_FILE = "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
 MODEL_FILE = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MODEL_FILE
 CONTEXT_LIMIT = int(sys.argv[2]) if len(sys.argv) > 2 else 65536
@@ -40,7 +40,7 @@ except Exception:
 
 MAX_KV_CACHE_VRAM_GB = (CONTEXT_LIMIT / 65536.0) * 1.93
 
-# Colors
+# ANSI Colors
 C_RESET = "\033[0m"
 C_BOLD = "\033[1m"
 C_CYAN = "\033[96m"
@@ -80,6 +80,7 @@ def shutdown_server():
 PHANDLER_ROUTINE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
 
 def win_ctrl_handler(ctrl_type):
+    # 0 = CTRL_C_EVENT, 1 = CTRL_BREAK_EVENT, 2 = CTRL_CLOSE_EVENT
     shutdown_server()
     return True
 
@@ -87,6 +88,7 @@ handler_func = PHANDLER_ROUTINE(win_ctrl_handler)
 ctypes.windll.kernel32.SetConsoleCtrlHandler(handler_func, True)
 
 def get_visual_width(text):
+    """Accurately calculate visible terminal column width ignoring ANSI codes and accounting for wide emojis."""
     clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
     width = 0
     for ch in clean:
@@ -98,6 +100,7 @@ def get_visual_width(text):
     return width
 
 def render_row(content, inner_width):
+    """Render a table row with exact right border alignment."""
     v_width = get_visual_width(content)
     pad = max(0, inner_width - v_width)
     return f"{C_CYAN}│{C_RESET} {content}{' ' * pad} {C_CYAN}│{C_RESET}"
@@ -155,6 +158,7 @@ def gpu_vram_poller():
             time.sleep(0.1)
 
 def make_stacked_vram_bar(model_gb, total_used_gb, max_gb=8.0, length=20):
+    """Generate multi-color stacked bar: Cyan for model, Yellow for OS/apps, Gray for empty."""
     model_gb = min(model_gb, max_gb)
     other_gb = max(0.0, min(total_used_gb - model_gb, max_gb - model_gb))
     
@@ -207,7 +211,7 @@ def main():
         "--port", str(PORT)
     ]
 
-    print(f"{C_BOLD}{C_CYAN}Запуск {MODEL_NAME} и инициализация дашборда...{C_RESET}")
+    print(f"{C_BOLD}{C_CYAN}Launching {MODEL_NAME} and initializing live dashboard...{C_RESET}")
     try:
         server_proc = subprocess.Popen(
             server_cmd,
@@ -216,7 +220,7 @@ def main():
             bufsize=1
         )
     except Exception as e:
-        print(f"{C_RED}Ошибка запуска llama-server: {e}{C_RESET}")
+        print(f"{C_RED}Failed to start llama-server: {e}{C_RESET}")
         sys.exit(1)
 
     t = threading.Thread(target=log_reader, args=(server_proc,), daemon=True)
@@ -233,10 +237,11 @@ def main():
     my_pid = os.getpid()
 
     while running:
+        # Check keyboard press (q, Esc, Ctrl+C)
         while msvcrt.kbhit():
             ch = msvcrt.getch()
             if ch in (b'q', b'Q', b'\x1b', b'\x03'):
-                print(f"\n{C_YELLOW}Выход по нажатию клавиши...{C_RESET}")
+                print(f"\n{C_YELLOW}Exit requested via keypress...{C_RESET}")
                 shutdown_server()
                 break
 
@@ -244,7 +249,7 @@ def main():
             break
 
         if server_proc.poll() is not None:
-            print(f"\n{C_RED}Сервер завершил работу с кодом {server_proc.returncode}{C_RESET}")
+            print(f"\n{C_RED}Server exited with code {server_proc.returncode}{C_RESET}")
             break
 
         try:
@@ -273,16 +278,17 @@ def main():
         vram_bar, m_gb, o_gb, t_gb = make_stacked_vram_bar(model_vram_gb, display_total_vram_gb, TOTAL_VRAM_GB, length=18)
         total_vram_pct = (t_gb / TOTAL_VRAM_GB) * 100.0
 
-        ram_spillover_status = f"{C_GREEN}0.00 GB  [✅ 100% В VRAM, БЕЗ ВЫГРУЗОК]{C_RESET}"
+        ram_spillover_status = f"{C_GREEN}0.00 GB  [✅ 100% IN VRAM, NO OFFLOAD]{C_RESET}"
         ctx_percent = (used_ctx_tokens / CONTEXT_LIMIT) * 100.0
 
-        status_badge = f"{C_GREEN}● ГОТОВ К РАБОТЕ (IDLE){C_RESET}" if not is_processing else f"{C_YELLOW}⚡ ОБРАБОТКА / ГЕНЕРАЦИЯ...{C_RESET}"
+        status_badge = f"{C_GREEN}● READY (IDLE){C_RESET}" if not is_processing else f"{C_YELLOW}⚡ PROCESSING / GENERATING...{C_RESET}"
         if not ready:
-            status_badge = f"{C_MAGENTA}⏳ ЗАГРУЗКА В VRAM...{C_RESET}"
+            status_badge = f"{C_MAGENTA}⏳ LOADING TO VRAM...{C_RESET}"
 
         uptime = int(time.time() - start_time)
         uptime_str = f"{uptime // 60:02d}:{uptime % 60:02d}"
 
+        # Clear screen
         sys.stdout.write("\033[H\033[J")
 
         # Top border
@@ -295,35 +301,35 @@ def main():
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
         # Server Info
-        print(render_row(f"{C_BOLD}Статус сервера:{C_RESET}   {status_badge}     {C_BOLD}Аптайм:{C_RESET} {uptime_str}", INNER_WIDTH))
-        print(render_row(f"{C_BOLD}Модель:{C_RESET}           {C_CYAN}{MODEL_NAME}{C_RESET}", INNER_WIDTH))
-        print(render_row(f"{C_BOLD}Эндпоинт API:{C_RESET}     {C_GREEN}http://127.0.0.1:{PORT}/v1{C_RESET}", INNER_WIDTH))
-        print(render_row(f"{C_BOLD}Конфигурация:{C_RESET}     {CONTEXT_LIMIT:,} токенов  |  Кеш: Q8_0  |  Flash-Attn: ON", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}Server Status:{C_RESET}    {status_badge}     {C_BOLD}Uptime:{C_RESET} {uptime_str}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}Model:{C_RESET}            {C_CYAN}{MODEL_NAME}{C_RESET}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}API Endpoint:{C_RESET}     {C_GREEN}http://127.0.0.1:{PORT}/v1{C_RESET}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}Configuration:{C_RESET}    {CONTEXT_LIMIT:,} tokens  |  Cache: Q8_0  |  Flash-Attn: ON", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
         # Memory Section (Stacked + Self RAM)
-        print(render_row(f"{C_BOLD}📊 ВИДЕОПАМЯТЬ И ОЗУ (VRAM & RAM МЕТРИКИ):{C_RESET}", INNER_WIDTH))
-        print(render_row(f"  ├─ 🎮 {C_BOLD}Видеопамять (VRAM):{C_RESET}   {vram_bar}  {t_gb:.2f} / {TOTAL_VRAM_GB:.1f} GB ({total_vram_pct:.1f}%)", INNER_WIDTH))
-        legend = f"     └─ {C_CYAN}■ Модель:{C_RESET} {m_gb:.2f} GB  |  {C_YELLOW}■ Windows/Система:{C_RESET} {o_gb:.2f} GB"
+        print(render_row(f"{C_BOLD}📊 VRAM & SYSTEM RAM METRICS:{C_RESET}", INNER_WIDTH))
+        print(render_row(f"  ├─ 🎮 {C_BOLD}GPU Memory (VRAM):{C_RESET}   {vram_bar}  {t_gb:.2f} / {TOTAL_VRAM_GB:.1f} GB ({total_vram_pct:.1f}%)", INNER_WIDTH))
+        legend = f"     └─ {C_CYAN}■ Model:{C_RESET} {m_gb:.2f} GB  |  {C_YELLOW}■ Windows/System:{C_RESET} {o_gb:.2f} GB"
         print(render_row(legend, INNER_WIDTH))
-        print(render_row(f"  ├─ 🧠 {C_BOLD}Выгрузка в RAM (CPU):{C_RESET} {ram_spillover_status}", INNER_WIDTH))
-        print(render_row(f"  ├─ ⚙️  {C_BOLD}ОЗУ сервера (llama):{C_RESET}  ~{server_ram_gb:.2f} GB (хост-буфер Vulkan)", INNER_WIDTH))
-        print(render_row(f"  └─ 🐍 {C_BOLD}ОЗУ дашборда (Python):{C_RESET} {C_GREEN}{my_ram_mb:.1f} MB{C_RESET} (легковесный UI монитор)", INNER_WIDTH))
+        print(render_row(f"  ├─ 🧠 {C_BOLD}CPU RAM Spillover:{C_RESET}   {ram_spillover_status}", INNER_WIDTH))
+        print(render_row(f"  ├─ ⚙️  {C_BOLD}Server RAM (llama):{C_RESET}  ~{server_ram_gb:.2f} GB (Vulkan host buffer)", INNER_WIDTH))
+        print(render_row(f"  └─ 🐍 {C_BOLD}Dashboard RAM (Py):{C_RESET} {C_GREEN}{my_ram_mb:.1f} MB{C_RESET} (lightweight UI monitor)", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
         # Context & Speed Section
-        print(render_row(f"{C_BOLD}📈 АКТИВНОСТЬ КОНТЕКСТА И СКОРОСТЬ:{C_RESET}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}📈 CONTEXT ACTIVITY & THROUGHPUT:{C_RESET}", INNER_WIDTH))
         ctx_bar = make_bar(ctx_percent, length=18, color=C_GREEN if ctx_percent < 80 else C_YELLOW)
-        print(render_row(f"  ├─ 🗂  {C_BOLD}Занято контекста:{C_RESET}    {ctx_bar}  {used_ctx_tokens:,} / {CONTEXT_LIMIT:,} ({ctx_percent:.1f}%)", INNER_WIDTH))
+        print(render_row(f"  ├─ 🗂  {C_BOLD}Context Occupied:{C_RESET}    {ctx_bar}  {used_ctx_tokens:,} / {CONTEXT_LIMIT:,} ({ctx_percent:.1f}%)", INNER_WIDTH))
         
         gen_spd_display = f"{last_gen_speed:.1f} tok/s" if last_gen_speed > 0 else "—"
         prompt_spd_display = f"{last_prompt_speed:.1f} tok/s" if last_prompt_speed > 0 else "—"
-        speed_text = f"Генерация: {C_BOLD}{C_GREEN}{gen_spd_display}{C_RESET}  |  Промпт: {C_BOLD}{C_CYAN}{prompt_spd_display}{C_RESET}"
-        print(render_row(f"  └─ ⚡ {C_BOLD}Скорость ответа:{C_RESET}     {speed_text}", INNER_WIDTH))
+        speed_text = f"Generation: {C_BOLD}{C_GREEN}{gen_spd_display}{C_RESET}  |  Prompt: {C_BOLD}{C_CYAN}{prompt_spd_display}{C_RESET}"
+        print(render_row(f"  └─ ⚡ {C_BOLD}Response Speed:{C_RESET}      {speed_text}", INNER_WIDTH))
         print(f"{C_CYAN}├{'─' * (INNER_WIDTH + 2)}┤{C_RESET}")
 
         # Logs Section
-        print(render_row(f"{C_BOLD}📜 ЖИВОЙ ЛОГ СОБЫТИЙ СЕРВЕРА:{C_RESET}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}📜 LIVE SERVER EVENT LOGS:{C_RESET}", INNER_WIDTH))
         recent = list(logs_deque)[-6:]
         for idx in range(6):
             if idx < len(recent):
@@ -334,7 +340,7 @@ def main():
 
         # Bottom border
         print(f"{C_CYAN}└{'─' * (INNER_WIDTH + 2)}┘{C_RESET}")
-        print(f" {C_GRAY}[Нажмите 'Q', 'Esc' или 'Ctrl+C' для остановки сервера]{C_RESET}")
+        print(f" {C_GRAY}[Press 'Q', 'Esc' or 'Ctrl+C' to cleanly stop the server]{C_RESET}")
 
         for _ in range(10):
             if not running:
@@ -343,11 +349,11 @@ def main():
                 break
             time.sleep(0.1)
 
-    print(f"\n{C_GREEN}Сервер успешно остановлен.{C_RESET}")
+    print(f"\n{C_GREEN}Server stopped cleanly.{C_RESET}")
 
 if __name__ == "__main__":
     try:
         main()
     except (KeyboardInterrupt, SystemExit):
         shutdown_server()
-        print(f"\n{C_GREEN}Сервер успешно остановлен.{C_RESET}")
+        print(f"\n{C_GREEN}Server stopped cleanly.{C_RESET}")

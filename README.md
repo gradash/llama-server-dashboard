@@ -1,81 +1,91 @@
-# ⚡ LLAMA-SERVER LIVE TERMINAL DASHBOARD
+# ⚡ llama-server-dashboard
 
-A lightweight, zero-dependency, real-time visual terminal dashboard and monitor for `llama-server` (`llama.cpp`) with detailed **GPU VRAM** and **RAM offload / staging** metrics, token throughput counters, and live event logging.
+> A lightweight, zero-dependency, real-time terminal dashboard and monitor for `llama-server` (`llama.cpp`) with live **GPU VRAM partitioning**, **CPU RAM offload detection**, token throughput counters, and formatted event logging.
 
 ---
 
-## 📸 Preview (ASCII Art Representation)
+## 📸 ASCII Preview
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                    ⚡ QWEN 2.5 CODER 7B (LLAMA-SERVER DASHBOARD) ⚡                    │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│  Статус сервера:   ● ГОТОВ К РАБОТЕ (IDLE)              Аптайм: 05:42                  │
-│  Модель:           Qwen 2.5 Coder 7B Instruct (Q4_K_M)                                 │
-│  Эндпоинт API:     http://127.0.0.1:8080/v1                                            │
-│  Конфигурация:     65,536 токенов  |  Кеш: Q8_0  |  Flash-Attn: ON                     │
+│  Server Status:    ● READY (IDLE)                       Uptime: 08:24                  │
+│  Model:            Qwen 2.5 Coder 7B Instruct (Q4_K_M)                                 │
+│  API Endpoint:     http://127.0.0.1:8080/v1                                            │
+│  Configuration:    65,536 tokens  |  Cache: Q8_0  |  Flash-Attn: ON                     │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│  📊 ВИДЕОПАМЯТЬ И ОЗУ (VRAM & RAM МЕТРИКИ):                                            │
-│  ├─ 🎮 Видеопамять (VRAM):   [██████████████████░░]  7.80 / 8.0 GB (97.5%)             │
-│     └─ ■ Модель: 5.56 GB  |  ■ Windows/Система: 2.24 GB                                │
-│  ├─ 🧠 Выгрузка в RAM (CPU): 0.00 GB  [✅ 100% В VRAM, БЕЗ ВЫГРУЗОК]                  │
-│  ├─ ⚙️  ОЗУ сервера (llama):  ~5.24 GB (хост-буфер Vulkan)                              │
-│  └─ 🐍 ОЗУ дашборда (Python): 30.4 MB (легковесный UI монитор)                         │
+│  📊 VRAM & SYSTEM RAM METRICS:                                                         │
+│  ├─ 🎮 GPU Memory (VRAM):   [██████████████████░░]  7.80 / 8.0 GB (97.5%)             │
+│     └─ ■ Model: 5.56 GB  |  ■ Windows/System: 2.24 GB                                │
+│  ├─ 🧠 CPU RAM Spillover:   0.00 GB  [✅ 100% IN VRAM, NO OFFLOAD]                    │
+│  ├─ ⚙️  Server RAM (llama):  ~5.24 GB (Vulkan host buffer)                              │
+│  └─ 🐍 Dashboard RAM (Py):  30.4 MB (lightweight UI monitor)                         │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│  📈 АКТИВНОСТЬ КОНТЕКСТА И СКОРОСТЬ:                                                   │
-│  ├─ 🗂  Занято контекста:    [███░░░░░░░░░░░░░░░]  12,291 / 65,536 (18.8%)             │
-│  └─ ⚡ Скорость ответа:     Генерация: 43.8 tok/s  |  Промпт: 146.2 tok/s              │
+│  📈 CONTEXT ACTIVITY & THROUGHPUT:                                                     │
+│  ├─ 🗂  Context Occupied:    [███░░░░░░░░░░░░░░░]  12,291 / 65,536 (18.8%)             │
+│  └─ ⚡ Response Speed:      Generation: 43.8 tok/s  |  Prompt: 146.2 tok/s              │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│  📜 ЖИВОЙ ЛОГ СОБЫТИЙ СЕРВЕРА:                                                         │
+│  📜 LIVE SERVER EVENT LOGS:                                                            │
 │  > HTTP server listening on http://127.0.0.1:8080                                      │
 │  > slot 0 | task 359 | prompt processing: 146.19 tokens per second                     │
 │  > slot 0 | task 359 | n_gen = 280, tg = 43.85 t/s                                     │
 │  > slot 0 | all slots are idle                                                         │
 └────────────────────────────────────────────────────────────────────────────────────────┘
- [Нажмите 'Q', 'Esc' или 'Ctrl+C' для остановки сервера]
+ [Press 'Q', 'Esc' or 'Ctrl+C' to cleanly stop the server]
 ```
 
 ---
 
-## ✨ Features / Возможности
+## ✨ Key Features
 
-* 🎮 **Stacked Multi-Color VRAM Bar:** Visualizes exact VRAM partition — 🟦 **Model & KV Cache** vs 🟨 **Windows OS / Browser** vs ░ **Free VRAM**.
-* 🧠 **Zero-Spillover Detection:** Monitors whether layers are 100% in VRAM or offloaded to system CPU RAM.
-* ⚙️ **Dual RAM Metrics:** Separately tracks `llama-server` process memory (Vulkan host-visible staging buffer) and the lightweight Python monitor footprint (~30 MB).
-* ⚡ **Live Throughput Parsing:** Real-time token generation speed (`tg tok/s`) and prompt evaluation speed (`prompt tok/s`).
-* 🛑 **Bulletproof Termination:** Native Windows console control handlers (`SetConsoleCtrlHandler`) and direct key listener — instantly terminates child server processes on `Q`, `Esc`, or `Ctrl+C`.
-* 📦 **Universal Model Support:** Launch any `.gguf` file by passing it as a CLI argument.
-* 🪶 **Zero Dependencies:** Pure Python 3 (standard library only: `ctypes`, `subprocess`, `urllib`, `re`). No `pip install` required!
+* 🎮 **Stacked Multi-Color VRAM Gauge:** Visually distinguishes memory allocation:
+  * 🟦 **Cyan:** Memory occupied strictly by the Model weights and active KV-Cache.
+  * 🟨 **Yellow:** Memory consumed by Windows DWM, Desktop, browsers, and background apps.
+  * ░ **Gray:** Remaining unallocated GPU VRAM headroom.
+* 🧠 **Zero-Spillover Detection:** Monitors whether all layers are running 100% in VRAM or spilling into system RAM.
+* ⚙️ **Dual-Process RAM Tracking:** Separately displays `llama-server` process footprint (e.g. Vulkan host-visible staging buffer) and the dashboard's own tiny Python runtime (~30 MB).
+* ⚡ **Live Throughput Counters:** Real-time token generation speed (`tg tok/s`) and prompt evaluation speed (`prompt tok/s`).
+* 🛑 **Bulletproof Clean Exit:** Uses Windows Native Console Control Handlers (`SetConsoleCtrlHandler`) and non-blocking key polling — gracefully terminates both the dashboard and `llama-server.exe` on `Q`, `Esc`, or `Ctrl+C`.
+* 📦 **Universal GGUF Compatibility:** Works out of the box with any model (Qwen, DeepSeek, Llama, Mistral, Gemma, etc.) by passing the model path as a CLI argument.
+* 🪶 **Zero Dependencies:** Pure Python 3 (Standard library only: `ctypes`, `subprocess`, `urllib`, `re`, `msvcrt`). No `pip install` or external packages required.
 
 ---
 
-## 🚀 Quick Start / Быстрый старт
+## 🚀 Getting Started
 
-### 1. Requirements
-* Windows 10 / 11 (64-bit)
-* Python 3.8+
-* `llama-server.exe` from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
-* Any GGUF model (e.g. `Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf`)
+### Prerequisites
+* **OS:** Windows 10 / 11 (64-bit)
+* **Python:** Python 3.8+
+* **Backend:** `llama-server.exe` from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
+* Any GGUF model file (e.g. `qwen2.5-coder-7b-instruct-q4_k_m.gguf`)
 
-### 2. Usage / Запуск
+### Usage
 
-#### Default launch:
+#### 1. Quick Launch (Default Model)
 ```cmd
 python dashboard.py
 ```
 
-#### Launch with custom model, context, or port:
+#### 2. Launch with Custom Parameters
 ```cmd
-python dashboard.py path/to/model.gguf 65536 8080
+python dashboard.py path/to/model.gguf <context_length> <port>
 ```
 
-* Argument 1: Model file path (default: `qwen2.5-coder-7b-instruct-q4_k_m.gguf`)
-* Argument 2: Context window size (default: `65536`)
-* Argument 3: Port (default: `8080`)
+Example:
+```cmd
+python dashboard.py models/DeepSeek-R1-Distill-Qwen-7B-Q8_0.gguf 131072 8080
+```
+
+* `Arg 1`: Path to GGUF model (default: `qwen2.5-coder-7b-instruct-q4_k_m.gguf`)
+* `Arg 2`: Context window size in tokens (default: `65536`)
+* `Arg 3`: HTTP API port (default: `8080`)
 
 ---
 
 ## 🛠 One-Click Batch Launcher (`start_qwen_7b.bat`)
+
+Place `start_qwen_7b.bat` in your model directory for instant double-click startup:
 
 ```bat
 @echo off
@@ -90,4 +100,4 @@ pause
 
 ## 📄 License
 
-MIT License. Feel free to use, modify, and distribute!
+MIT License. Open source and free for personal and commercial use.
