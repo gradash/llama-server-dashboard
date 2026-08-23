@@ -7,7 +7,7 @@
 ## 📸 Live Terminal Preview
 
 <p align="center">
-  <img src="assets/preview.svg" alt="llama-server live dashboard preview" width="850">
+  <img src="assets/dashboard.svg" alt="llama-server live dashboard preview" width="850">
 </p>
 
 ---
