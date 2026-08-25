@@ -249,10 +249,10 @@ MODEL_DRAFT_FILE = CLI_META.get("draft_file")
 clean_name = os.path.splitext(os.path.basename(MODEL_FILE))[0]
 MODEL_NAME = clean_name.replace('-', ' ').replace('_', ' ').title()
 
-def sync_active_model_to_omp(model_file):
+def sync_active_model_to_omp(model_file, active_ctx):
     """
     Automatically sets the project's and global default model role in Oh My Pi
-    to the currently running local model so that OMP always displays and routes to the active model.
+    to the currently running local model with the exact running context window.
     Also cleans SQLite model_cache so OMP immediately re-reads models.yml without stale cache.
     """
     model_id = os.path.basename(model_file)
@@ -270,7 +270,34 @@ def sync_active_model_to_omp(model_file):
         except Exception:
             pass
 
-    # Sync models.yml everywhere as well
+    # Build dynamic model list where the active model gets the exact launched contextWindow
+    all_models = [
+        ("Ternary-Bonsai-27B-Q2_0.gguf", "Bonsai 27B (Ternary Q2_0)", 65536),
+        ("Bonsai-27B-Q1_0.gguf", "Bonsai 27B (Ternary Q1_0)", 65536),
+        ("gpt-oss-20b-UD-Q6_K_XL.gguf", "GPT-OSS 20B (UD Q6_K_XL)", 32768),
+        ("qwen2.5-coder-7b-instruct-q4_k_m.gguf", "Qwen 2.5 Coder 7B (Local Q4_K_M)", 65536),
+        ("qwen3-4b-thinking-2507.Q8_0.gguf", "Qwen 3 4B Thinking (Q8_0)", 65536),
+        ("qwen3.5-4B-super-coder.Q4_0.gguf", "Qwen 3.5 4B Super Coder (Q4_0)", 65536)
+    ]
+
+    lines = [
+        "providers:",
+        "  llama.cpp:",
+        "    baseUrl: http://127.0.0.1:8080/v1",
+        "    api: openai-completions",
+        "    auth: none",
+        "    models:"
+    ]
+    for mid, mname, def_ctx in all_models:
+        ctx = active_ctx if mid == model_id else def_ctx
+        max_tok = min(8192, ctx)
+        lines.append(f"      - id: {mid}")
+        lines.append(f"        name: {mname}")
+        lines.append(f"        contextWindow: {ctx}")
+        lines.append(f"        maxTokens: {max_tok}")
+
+    models_content = "\n".join(lines) + "\n"
+
     models_yaml_paths = [
         os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".omp", "models.yml")),
         os.path.expanduser("~/.omp/agent/models.yml"),
@@ -279,37 +306,6 @@ def sync_active_model_to_omp(model_file):
         r"G:\My Drive\LLM\.omp\models.yml",
         r"G:\My Drive\LLM\models.yml"
     ]
-    models_content = """providers:
-  llama.cpp:
-    baseUrl: http://127.0.0.1:8080/v1
-    api: openai-completions
-    auth: none
-    models:
-      - id: Ternary-Bonsai-27B-Q2_0.gguf
-        name: Bonsai 27B (Ternary Q2_0)
-        contextWindow: 65536
-        maxTokens: 8192
-      - id: Bonsai-27B-Q1_0.gguf
-        name: Bonsai 27B (Ternary Q1_0)
-        contextWindow: 65536
-        maxTokens: 8192
-      - id: gpt-oss-20b-UD-Q6_K_XL.gguf
-        name: GPT-OSS 20B (UD Q6_K_XL)
-        contextWindow: 65536
-        maxTokens: 8192
-      - id: qwen2.5-coder-7b-instruct-q4_k_m.gguf
-        name: Qwen 2.5 Coder 7B (Local Q4_K_M)
-        contextWindow: 65536
-        maxTokens: 8192
-      - id: qwen3-4b-thinking-2507.Q8_0.gguf
-        name: Qwen 3 4B Thinking (Q8_0)
-        contextWindow: 65536
-        maxTokens: 8192
-      - id: qwen3.5-4B-super-coder.Q4_0.gguf
-        name: Qwen 3.5 4B Super Coder (Q4_0)
-        contextWindow: 65536
-        maxTokens: 8192
-"""
     for mp in models_yaml_paths:
         try:
             if os.path.exists(os.path.dirname(mp)):
@@ -329,8 +325,8 @@ def sync_active_model_to_omp(model_file):
     except Exception:
         pass
 
-# Sync OMP config immediately on launch
-sync_active_model_to_omp(MODEL_FILE)
+# Sync OMP config immediately on launch with exact active context
+sync_active_model_to_omp(MODEL_FILE, CONTEXT_LIMIT)
 # Estimate base model weights + draft weights size in GB from files
 try:
     base_sz = os.path.getsize(MODEL_FILE) if os.path.exists(MODEL_FILE) else 4.68 * (1024.0**3)
