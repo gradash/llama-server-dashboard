@@ -356,6 +356,7 @@ running = True
 last_prompt_speed = 0.0
 last_gen_speed = 0.0
 real_total_vram_gb = TOTAL_VRAM_GB * 0.95
+real_llama_vram_gb = 0.0
 cpu_offload_detected = False
 cpu_layers_count = 0
 def format_llama_log_to_human_event(raw_line):
@@ -508,7 +509,7 @@ def log_reader(proc):
         if event:
             events_deque.append(event)
 def gpu_vram_poller():
-    global running, real_total_vram_gb, IS_NVIDIA, TOTAL_VRAM_GB
+    global running, real_total_vram_gb, real_llama_vram_gb, IS_NVIDIA, TOTAL_VRAM_GB, server_proc
     while running:
         if IS_NVIDIA:
             try:
@@ -523,11 +524,20 @@ def gpu_vram_poller():
                 pass
         else:
             try:
-                cmd = "powershell.exe -NoProfile -Command \"(Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum\""
+                pid_val = server_proc.pid if server_proc else 0
+                cmd = f"""powershell.exe -NoProfile -Command "
+                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+                    $tot = (Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum;
+                    $proc = (Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage').CounterSamples | Where-Object {{ $_.InstanceName -like 'pid_{pid_val}_*' }} | Measure-Object -Property CookedValue -Sum | Select-Object -ExpandProperty Sum;
+                    Write-Output \"$tot|$proc\"
+                " """
                 out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore').strip()
-                if out:
-                    bytes_val = float(out)
-                    real_total_vram_gb = max(1.0, min(TOTAL_VRAM_GB, bytes_val / (1024.0 ** 3)))
+                if "|" in out:
+                    tot_str, proc_str = out.split("|", 1)
+                    if tot_str.strip():
+                        real_total_vram_gb = max(1.0, min(TOTAL_VRAM_GB, float(tot_str.strip()) / (1024.0 ** 3)))
+                    if proc_str.strip():
+                        real_llama_vram_gb = float(proc_str.strip()) / (1024.0 ** 3)
             except Exception:
                 pass
 
@@ -535,7 +545,6 @@ def gpu_vram_poller():
             if not running:
                 break
             time.sleep(0.1)
-
 def make_stacked_vram_bar(model_gb, total_used_gb, max_gb=8.0, length=20):
     model_gb = min(model_gb, max_gb)
     other_gb = max(0.0, min(total_used_gb - model_gb, max_gb - model_gb))
@@ -638,11 +647,12 @@ def main():
 
         my_ram_mb = get_process_ram_mb(my_pid)
 
+        # Exact Llama VRAM vs Windows VRAM
         current_kv_gb = (used_ctx_tokens / CONTEXT_LIMIT) * MAX_KV_CACHE_VRAM_GB if used_ctx_tokens > 0 else 0.1
-        model_vram_gb = BASE_MODEL_VRAM_GB + current_kv_gb + VULKAN_OVERHEAD_GB
-
-        display_total_vram_gb = max(model_vram_gb, real_total_vram_gb)
-        vram_bar, m_gb, o_gb, t_gb = make_stacked_vram_bar(model_vram_gb, display_total_vram_gb, TOTAL_VRAM_GB, length=18)
+        calc_llama_gb = BASE_MODEL_VRAM_GB + current_kv_gb + VULKAN_OVERHEAD_GB
+        m_gb = real_llama_vram_gb if real_llama_vram_gb > 2.0 else calc_llama_gb
+        t_gb = max(m_gb, real_total_vram_gb)
+        vram_bar, m_gb, o_gb, t_gb = make_stacked_vram_bar(m_gb, t_gb, TOTAL_VRAM_GB, length=18)
         total_vram_pct = (t_gb / TOTAL_VRAM_GB) * 100.0
 
         if cpu_offload_detected and cpu_layers_count > 0:
@@ -680,7 +690,7 @@ def main():
         # Memory Section (Stacked + Self RAM)
         print(render_row(f"{C_BOLD}📊 VRAM & SYSTEM RAM METRICS:{C_RESET}", INNER_WIDTH))
         print(render_row(f"  ├─ 🎮 {C_BOLD}GPU Memory (VRAM):{C_RESET}   {vram_bar}  {t_gb:.2f} / {TOTAL_VRAM_GB:.1f} GB ({total_vram_pct:.1f}%)", INNER_WIDTH))
-        legend = f"     └─ {C_CYAN}■ Model:{C_RESET} {m_gb:.2f} GB  |  {C_YELLOW}■ Windows/System:{C_RESET} {o_gb:.2f} GB"
+        legend = f"     └─ {C_CYAN}■ LLM (Model+KV):{C_RESET} {m_gb:.2f} GB  |  {C_YELLOW}■ Windows/DWM/Apps:{C_RESET} {o_gb:.2f} GB"
         print(render_row(legend, INNER_WIDTH))
         print(render_row(f"  ├─ 🧠 {C_BOLD}CPU RAM Spillover:{C_RESET}   {ram_spillover_status}", INNER_WIDTH))
         server_ram_label = "Vulkan host buffer" if not IS_NVIDIA else "CUDA runtime buffer"
