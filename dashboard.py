@@ -272,14 +272,15 @@ def sync_active_model_to_omp(model_file, active_ctx):
 
     # Build dynamic model list where the active model gets the exact launched contextWindow
     all_models = [
+        ("Qwen3.8-9B-Q8_0.gguf", "Qwen 3.8 9B (Q8_0)", 131072),
+        ("qwen2.5-coder-14b-instruct-q4_k_m.gguf", "Qwen 2.5 Coder 14B (Q4_K_M)", 131072),
         ("Ternary-Bonsai-27B-Q2_0.gguf", "Bonsai 27B (Ternary Q2_0)", 65536),
         ("Bonsai-27B-Q1_0.gguf", "Bonsai 27B (Ternary Q1_0)", 65536),
-        ("gpt-oss-20b-UD-Q6_K_XL.gguf", "GPT-OSS 20B (UD Q6_K_XL)", 32768),
+        ("gpt-oss-20b-UD-Q6_K_XL.gguf", "GPT-OSS 20B (UD Q6_K_XL)", 65536),
         ("qwen2.5-coder-7b-instruct-q4_k_m.gguf", "Qwen 2.5 Coder 7B (Local Q4_K_M)", 65536),
         ("qwen3-4b-thinking-2507.Q8_0.gguf", "Qwen 3 4B Thinking (Q8_0)", 65536),
         ("qwen3.5-4B-super-coder.Q4_0.gguf", "Qwen 3.5 4B Super Coder (Q4_0)", 65536)
     ]
-
     lines = [
         "providers:",
         "  llama.cpp:",
@@ -621,9 +622,14 @@ def main():
                     s0 = slots[0]
                     ready = True
                     is_processing = s0.get('is_processing', False)
-                    n_prompt = s0.get('n_prompt_tokens', 0)
-                    n_processed = s0.get('n_prompt_tokens_processed', 0)
-                    used_ctx_tokens = max(n_prompt, n_processed)
+                    if is_processing:
+                        n_prompt = s0.get('n_prompt_tokens', 0)
+                        n_processed = s0.get('n_prompt_tokens_processed', 0)
+                        used_ctx_tokens = max(n_prompt, n_processed)
+                    else:
+                        # When slot is idle, read last prompt processed size or active cache
+                        n_prompt = s0.get('n_prompt_tokens', 0)
+                        used_ctx_tokens = n_prompt
         except Exception:
             ready = False
 
