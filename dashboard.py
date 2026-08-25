@@ -11,6 +11,7 @@ import unicodedata
 import msvcrt
 import ctypes
 import datetime
+import winreg
 from ctypes import wintypes
 from collections import deque
 
@@ -23,7 +24,7 @@ def detect_gpu_hardware():
     Auto-detects NVIDIA (CUDA), AMD (Vulkan), and Intel GPUs with exact total VRAM capacity.
     """
     gpu_name = "Generic GPU"
-    total_vram_gb = 8.0
+    total_vram_gb = 16.0
     vendor_type = "AMD Vulkan"
     is_nvidia = False
 
@@ -43,15 +44,48 @@ def detect_gpu_hardware():
     except Exception:
         pass
 
-    # 2. Fallback to Windows CIM / Performance Counters for AMD & Intel
+    # 2. Try Windows Registry for exact 64-bit VRAM size (AMD & Intel & NVIDIA fallback)
     try:
-        cmd = "powershell.exe -NoProfile -Command \"$g = Get-CimInstance Win32_VideoController | Select-Object -First 1; Write-Output ($g.Name + '|' + $g.AdapterRAM)\""
+        reg_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path) as base_key:
+            subkeys_count = winreg.QueryInfoKey(base_key)[0]
+            for i in reversed(range(subkeys_count)):
+                subkey_name = winreg.EnumKey(base_key, i)
+                if not subkey_name.isdigit():
+                    continue
+                with winreg.OpenKey(base_key, subkey_name) as subkey:
+                    try:
+                        desc, _ = winreg.QueryValueEx(subkey, "DriverDesc")
+                    except Exception:
+                        continue
+                    try:
+                        qw_mem, _ = winreg.QueryValueEx(subkey, "HardwareInformation.qwMemorySize")
+                        mem_gb = round(qw_mem / (1024.0 ** 3), 1)
+                        if mem_gb > 0:
+                            gpu_name = desc.strip()
+                            total_vram_gb = mem_gb
+                            name_u = gpu_name.upper()
+                            if "NVIDIA" in name_u:
+                                vendor_type = "NVIDIA"
+                                is_nvidia = True
+                            elif "AMD" in name_u or "RADEON" in name_u:
+                                vendor_type = "AMD Vulkan"
+                            elif "INTEL" in name_u:
+                                vendor_type = "Intel"
+                            return gpu_name, total_vram_gb, vendor_type, is_nvidia
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    # 3. Fallback to Windows CIM
+    try:
+        cmd = "powershell.exe -NoProfile -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $g = Get-CimInstance Win32_VideoController | Select-Object -First 1; Write-Output ($g.Name + '|' + $g.AdapterRAM)\""
         out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL, timeout=2.0).decode('utf-8', errors='ignore').strip()
         if "|" in out:
             name, ram = out.split("|", 1)
             gpu_name = name.strip()
             name_u = gpu_name.upper()
-
             if "NVIDIA" in name_u:
                 vendor_type = "NVIDIA"
                 is_nvidia = True
@@ -59,22 +93,6 @@ def detect_gpu_hardware():
                 vendor_type = "AMD Vulkan"
             elif "INTEL" in name_u:
                 vendor_type = "Intel"
-
-            # Check model heuristics for accurate VRAM capacity
-            if any(k in name_u for k in ("5700", "6600", "3060", "4060", "7600")):
-                total_vram_gb = 8.0
-            elif any(k in name_u for k in ("3070", "4070", "6700", "7700")):
-                total_vram_gb = 12.0
-            elif "3080" in name_u:
-                total_vram_gb = 10.0
-            elif any(k in name_u for k in ("6800", "6900", "7800", "7900 GRE", "4080")):
-                total_vram_gb = 16.0
-            elif any(k in name_u for k in ("7900", "3090", "4090")):
-                total_vram_gb = 24.0
-            else:
-                ram_val = float(ram) if ram.strip() else 0
-                if ram_val > 0:
-                    total_vram_gb = max(4.0, round(ram_val / (1024.0 ** 3), 1))
     except Exception:
         pass
 
@@ -103,9 +121,9 @@ def parse_cli_args(argv):
         "ub": "1024",
         "t": "6",
         "tb": "6",
-        "np": "1"
+        "np": "1",
+        "draft_file": None
     }
-
     passthrough_args = []
     
     if argv and not argv[0].startswith('-'):
@@ -159,6 +177,10 @@ def parse_cli_args(argv):
             elif arg in ('-ctv', '--cache-type-v') and val:
                 meta["ctv"] = val
                 i += 2
+            elif arg in ('-md', '--model-draft', '--spec-draft-model') and val:
+                meta["draft_file"] = val
+                passthrough_args.extend([arg, val])
+                i += 2
                 continue
             elif arg in ('-t', '--threads') and val:
                 meta["t"] = val
@@ -182,10 +204,20 @@ def parse_cli_args(argv):
                 continue
             else:
                 passthrough_args.append(arg)
+                if val and i + 1 < len(argv) and argv[i+1] == val:
+                    passthrough_args.append(val)
+                    i += 2
+                    continue
                 i += 1
+    server_bin = "llama-server.exe"
+    # Auto-detect if Bonsai / Prism model requires prism fork binary
+    if "bonsai" in meta["model_file"].lower() or any("dspark" in str(x).lower() for x in passthrough_args):
+        prism_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prism", "llama-server.exe")
+        if os.path.exists(prism_bin):
+            server_bin = prism_bin
 
     cmd = [
-        "llama-server.exe",
+        server_bin,
         "-m", meta["model_file"],
         "-ngl", str(meta["ngl"]),
         "-c", str(meta["context_limit"]),
@@ -197,6 +229,7 @@ def parse_cli_args(argv):
         "-t", str(meta["t"]),
         "-tb", str(meta["tb"]),
         "-np", str(meta["np"]),
+        "--jinja",
         "--cache-prompt",
         "--host", "127.0.0.1",
         "--port", str(meta["port"])
@@ -212,21 +245,102 @@ CONTEXT_LIMIT = CLI_META["context_limit"]
 PORT = CLI_META["port"]
 
 # Clean model name for display
+MODEL_DRAFT_FILE = CLI_META.get("draft_file")
 clean_name = os.path.splitext(os.path.basename(MODEL_FILE))[0]
 MODEL_NAME = clean_name.replace('-', ' ').replace('_', ' ').title()
 
-# Estimate base model weights size in GB from file
+def sync_active_model_to_omp(model_file):
+    """
+    Automatically sets the project's and global default model role in Oh My Pi
+    to the currently running local model so that OMP always displays and routes to the active model.
+    Also cleans SQLite model_cache so OMP immediately re-reads models.yml without stale cache.
+    """
+    model_id = os.path.basename(model_file)
+    config_paths = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".omp", "config.yml")),
+        r"G:\Мой диск\LLM\.omp\config.yml",
+        r"G:\My Drive\LLM\.omp\config.yml"
+    ]
+    yaml_content = f"modelRoles:\n  default: llama.cpp/{model_id}\nimages:\n  urls:\n    enabled: false\n"
+    for cp in config_paths:
+        try:
+            if os.path.exists(os.path.dirname(cp)):
+                with open(cp, "w", encoding="utf-8") as f:
+                    f.write(yaml_content)
+        except Exception:
+            pass
+
+    # Sync models.yml everywhere as well
+    models_yaml_paths = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".omp", "models.yml")),
+        os.path.expanduser("~/.omp/agent/models.yml"),
+        r"G:\Мой диск\LLM\.omp\models.yml",
+        r"G:\Мой диск\LLM\models.yml",
+        r"G:\My Drive\LLM\.omp\models.yml",
+        r"G:\My Drive\LLM\models.yml"
+    ]
+    models_content = """providers:
+  llama.cpp:
+    baseUrl: http://127.0.0.1:8080/v1
+    api: openai-completions
+    auth: none
+    models:
+      - id: Ternary-Bonsai-27B-Q2_0.gguf
+        name: Bonsai 27B (Ternary Q2_0)
+        contextWindow: 65536
+        maxTokens: 8192
+      - id: Bonsai-27B-Q1_0.gguf
+        name: Bonsai 27B (Ternary Q1_0)
+        contextWindow: 65536
+        maxTokens: 8192
+      - id: gpt-oss-20b-UD-Q6_K_XL.gguf
+        name: GPT-OSS 20B (UD Q6_K_XL)
+        contextWindow: 65536
+        maxTokens: 8192
+      - id: qwen2.5-coder-7b-instruct-q4_k_m.gguf
+        name: Qwen 2.5 Coder 7B (Local Q4_K_M)
+        contextWindow: 65536
+        maxTokens: 8192
+      - id: qwen3-4b-thinking-2507.Q8_0.gguf
+        name: Qwen 3 4B Thinking (Q8_0)
+        contextWindow: 65536
+        maxTokens: 8192
+      - id: qwen3.5-4B-super-coder.Q4_0.gguf
+        name: Qwen 3.5 4B Super Coder (Q4_0)
+        contextWindow: 65536
+        maxTokens: 8192
+"""
+    for mp in models_yaml_paths:
+        try:
+            if os.path.exists(os.path.dirname(mp)):
+                with open(mp, "w", encoding="utf-8") as f:
+                    f.write(models_content)
+        except Exception:
+            pass
+
+    try:
+        import sqlite3
+        db_path = os.path.expanduser("~/.omp/agent/models.db")
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            conn.execute("DELETE FROM model_cache WHERE provider_id LIKE '%llama%';")
+            conn.commit()
+            conn.close()
+    except Exception:
+        pass
+
+# Sync OMP config immediately on launch
+sync_active_model_to_omp(MODEL_FILE)
+# Estimate base model weights + draft weights size in GB from files
 try:
-    if os.path.exists(MODEL_FILE):
-        BASE_MODEL_VRAM_GB = os.path.getsize(MODEL_FILE) / (1024.0 ** 3)
-    else:
-        BASE_MODEL_VRAM_GB = 4.68
+    base_sz = os.path.getsize(MODEL_FILE) if os.path.exists(MODEL_FILE) else 4.68 * (1024.0**3)
+    draft_sz = os.path.getsize(MODEL_DRAFT_FILE) if (MODEL_DRAFT_FILE and os.path.exists(MODEL_DRAFT_FILE)) else 0.0
+    BASE_MODEL_VRAM_GB = (base_sz + draft_sz) / (1024.0 ** 3)
 except Exception:
-    BASE_MODEL_VRAM_GB = 4.68
+    BASE_MODEL_VRAM_GB = 6.67
 
 MAX_KV_CACHE_VRAM_GB = (CONTEXT_LIMIT / 65536.0) * 1.93
-
-# ANSI Colors
+offload_ram_gb = 0.0
 C_RESET = "\033[0m"
 C_BOLD = "\033[1m"
 C_CYAN = "\033[96m"
@@ -236,7 +350,6 @@ C_RED = "\033[91m"
 C_BLUE = "\033[94m"
 C_GRAY = "\033[90m"
 C_MAGENTA = "\033[95m"
-
 # Human-readable event history (max 8 entries)
 events_deque = deque(maxlen=8)
 server_proc = None
@@ -245,8 +358,9 @@ running = True
 # Real-time metrics
 last_prompt_speed = 0.0
 last_gen_speed = 0.0
-real_total_vram_gb = min(7.75, TOTAL_VRAM_GB * 0.95)
-
+real_total_vram_gb = TOTAL_VRAM_GB * 0.95
+cpu_offload_detected = False
+cpu_layers_count = 0
 def format_llama_log_to_human_event(raw_line):
     """
     Parses noisy raw llama-server internal debug lines into clean, informative activity cards.
@@ -291,7 +405,6 @@ def format_llama_log_to_human_event(raw_line):
         task_id = m_task.group(1) if m_task else "?"
         return f"{C_GRAY}● [{now_str}] Task #{task_id} Completed: Slot returned to idle{C_RESET}"
 
-    # General important error/warning notices
     if "error" in raw_line.lower() and not "unavailable_error" in raw_line:
         clean = raw_line.replace("\r", "")
         return f"{C_RED}✖ [{now_str}] Notice: {clean[:65]}{C_RESET}"
@@ -336,20 +449,40 @@ def get_visual_width(text):
             width += 1
     return width
 
+def truncate_to_visual_width(text, max_width):
+    """Truncates styled text so that its visual character width does not exceed max_width."""
+    clean = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
+    if get_visual_width(text) <= max_width:
+        return text
+    # Hard strip styling for overly long lines to guarantee crisp frame alignment
+    truncated_clean = clean[:max_width]
+    return truncated_clean
+
 def render_row(content, inner_width):
-    """Render a table row with exact right border alignment."""
+    """Render a table row with exact right border alignment and overflow protection."""
     v_width = get_visual_width(content)
+    if v_width > inner_width:
+        content = truncate_to_visual_width(content, inner_width)
+        v_width = get_visual_width(content)
     pad = max(0, inner_width - v_width)
     return f"{C_CYAN}│{C_RESET} {content}{' ' * pad} {C_CYAN}│{C_RESET}"
-
 def log_reader(proc):
-    global running, last_prompt_speed, last_gen_speed
+    global running, last_prompt_speed, last_gen_speed, cpu_offload_detected, cpu_layers_count
     for line in iter(proc.stdout.readline, b''):
         if not running:
             break
         raw_text = line.decode('utf-8', errors='replace').strip()
         if not raw_text:
             continue
+
+        # Detect CPU offloaded layers
+        if "offloaded" in raw_text and ("layers to CPU" in raw_text or "layers to GPU" in raw_text):
+            m_cpu = re.search(r'(\d+)\s*layers to CPU', raw_text)
+            if m_cpu and int(m_cpu.group(1)) > 0:
+                cpu_offload_detected = True
+                cpu_layers_count = int(m_cpu.group(1))
+        elif "layer 0 is assigned to device CPU" in raw_text:
+            cpu_offload_detected = True
 
         # Extract speed metrics
         if "prompt processing" in raw_text or "prompt eval" in raw_text:
@@ -374,11 +507,9 @@ def log_reader(proc):
                 except Exception:
                     pass
 
-        # Convert to clean human event
         event = format_llama_log_to_human_event(raw_text)
         if event:
             events_deque.append(event)
-
 def gpu_vram_poller():
     global running, real_total_vram_gb, IS_NVIDIA, TOTAL_VRAM_GB
     while running:
@@ -512,7 +643,11 @@ def main():
         vram_bar, m_gb, o_gb, t_gb = make_stacked_vram_bar(model_vram_gb, display_total_vram_gb, TOTAL_VRAM_GB, length=18)
         total_vram_pct = (t_gb / TOTAL_VRAM_GB) * 100.0
 
-        ram_spillover_status = f"{C_GREEN}0.00 GB  [✅ 100% IN VRAM, NO OFFLOAD]{C_RESET}"
+        if cpu_offload_detected and cpu_layers_count > 0:
+            ram_spillover_status = f"{C_YELLOW}{cpu_layers_count} layers in CPU RAM  [⚠️ PARTIAL OFFLOAD]{C_RESET}"
+        else:
+            ram_spillover_status = f"{C_GREEN}0.00 GB  [✅ 100% IN VRAM, NO OFFLOAD]{C_RESET}"
+
         ctx_percent = (used_ctx_tokens / CONTEXT_LIMIT) * 100.0
 
         status_badge = f"{C_GREEN}● READY (IDLE){C_RESET}" if not is_processing else f"{C_YELLOW}⚡ PROCESSING / GENERATING...{C_RESET}"
@@ -521,8 +656,6 @@ def main():
 
         uptime = int(time.time() - start_time)
         uptime_str = f"{uptime // 60:02d}:{uptime % 60:02d}"
-
-        # Clear screen
         sys.stdout.write("\033[H\033[J")
 
         # Top border
