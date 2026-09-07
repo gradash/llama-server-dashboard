@@ -324,7 +324,18 @@ def sync_active_model_to_omp(model_file, active_ctx):
         ("Qwen2.5-7B-Instruct-Q4_K_M.gguf", "Qwen 2.5 7B Instruct (Q4_K_M)", 65536),
     ]
 
-    models_yml_lines = ["providers:", "  llama.cpp:", "    name: llama.cpp", f"    baseUrl: http://127.0.0.1:{PORT}/v1", "    models:"]
+    models_yml_lines = [
+        "providers:",
+        "  llama.cpp:",
+        "    name: llama.cpp",
+        f"    baseUrl: http://127.0.0.1:{PORT}/v1",
+        "    api: openai-completions",
+        '    apiKey: "none"',
+        "    auth: none",
+        "    compat:",
+        "      maxTokensField: max_tokens",
+        "    models:"
+    ]
     found_active = False
 
     for fname, dname, def_ctx in PRESETS:
@@ -732,7 +743,8 @@ def main():
         print(render_row(f"{C_BOLD}Server Status:{C_RESET}    {status_badge}     {C_BOLD}Uptime:{C_RESET} {uptime_str}", INNER_WIDTH))
         print(render_row(f"{C_BOLD}Model:{C_RESET}            {C_CYAN}{MODEL_NAME}{C_RESET}", INNER_WIDTH))
         print(render_row(f"{C_BOLD}GPU Hardware:{C_RESET}     {C_GREEN}{GPU_NAME}{C_RESET} ({GPU_VENDOR}, {TOTAL_VRAM_GB} GB VRAM)", INNER_WIDTH))
-        print(render_row(f"{C_BOLD}API Endpoint:{C_RESET}     {C_CYAN}http://127.0.0.1:{PORT}/v1{C_RESET}", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}Web Chat UI:{C_RESET}      {C_CYAN}http://127.0.0.1:{PORT}/{C_RESET} (Web Browser)", INNER_WIDTH))
+        print(render_row(f"{C_BOLD}API Endpoint:{C_RESET}     {C_CYAN}http://127.0.0.1:{PORT}/v1{C_RESET} (OMP / Clients)", INNER_WIDTH))
         print(render_row(f"{C_BOLD}Configuration:{C_RESET}    {CONTEXT_LIMIT:,} tokens  |  Cache: {CLI_META['ctk']}  |  Flash-Attn: {CLI_META['fa']}", INNER_WIDTH))
         print(border_div)
         print(render_row(f"{C_BOLD}📊 VRAM & SYSTEM RAM METRICS:{C_RESET}", INNER_WIDTH))
