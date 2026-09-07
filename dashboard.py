@@ -435,6 +435,7 @@ C_MAGENTA = "\033[95m"
 
 # Human-readable event history (max 8 entries)
 events_deque = deque(maxlen=8)
+raw_output_buffer = deque(maxlen=30)
 server_proc = None
 running = True
 
@@ -515,9 +516,10 @@ def log_reader(proc):
             break
         try:
             raw_text = line.decode('utf-8', errors='ignore')
+            if raw_text.strip():
+                raw_output_buffer.append(raw_text.strip())
         except Exception:
             continue
-
         if "offloaded" in raw_text and "layers to CPU" in raw_text:
             m = re.search(r'offloaded\s+(\d+)\s+layers to CPU', raw_text)
             if m:
@@ -688,6 +690,11 @@ def main():
 
         if server_proc.poll() is not None:
             print(f"\n{C_RED}Server exited with code {server_proc.returncode}{C_RESET}")
+            if server_proc.returncode != 0 and raw_output_buffer:
+                print(f"\n{C_YELLOW}--- Last server console messages ---{C_RESET}")
+                for rline in raw_output_buffer:
+                    print(f"  {C_GRAY}{rline}{C_RESET}")
+                print()
             break
 
         try:
