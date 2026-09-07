@@ -266,10 +266,7 @@ def parse_cli_args(argv):
         # 1. Primary stable build in local directory (Clang / Vulkan)
         os.path.join(script_dir, "llama-server.exe"),
         os.path.join(script_dir, "llama-server"),
-        # 2. Prism custom builds
-        os.path.join(script_dir, "prism", "llama-server.exe"),
-        os.path.join(script_dir, "prism", "llama-server"),
-        # 3. System PATH
+        # 2. System PATH
         shutil.which("llama-server.exe"),
         shutil.which("llama-server"),
     ]
