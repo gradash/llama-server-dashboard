@@ -263,12 +263,12 @@ def parse_cli_args(argv):
     # Universal Binary Locator (Cross-platform & multi-environment)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        # 1. Prism custom builds (Vulkan / MTP / Bonsai)
-        os.path.join(script_dir, "prism", "llama-server.exe"),
-        os.path.join(script_dir, "prism", "llama-server"),
-        # 2. Local directory
+        # 1. Primary stable build in local directory (Clang / Vulkan)
         os.path.join(script_dir, "llama-server.exe"),
         os.path.join(script_dir, "llama-server"),
+        # 2. Prism custom builds
+        os.path.join(script_dir, "prism", "llama-server.exe"),
+        os.path.join(script_dir, "prism", "llama-server"),
         # 3. System PATH
         shutil.which("llama-server.exe"),
         shutil.which("llama-server"),
