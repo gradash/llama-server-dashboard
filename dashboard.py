@@ -454,7 +454,7 @@ events_deque = deque(maxlen=8)
 raw_output_buffer = deque(maxlen=30)
 server_proc = None
 running = True
-
+server_is_ready = False
 # Real-time metrics
 last_prompt_speed = 0.0
 last_gen_speed = 0.0
@@ -526,7 +526,7 @@ def render_row(content, inner_width=84):
 
 
 def log_reader(proc):
-    global running, last_prompt_speed, last_gen_speed, cpu_offload_detected, cpu_layers_count
+    global running, last_prompt_speed, last_gen_speed, cpu_offload_detected, cpu_layers_count, server_is_ready
     for line in iter(proc.stdout.readline, b''):
         if not running:
             break
@@ -536,6 +536,9 @@ def log_reader(proc):
                 raw_output_buffer.append(raw_text.strip())
         except Exception:
             continue
+
+        if any(w in raw_text for w in ("HTTP server listening", "all slots are idle and ready", "model loaded", "server is listening", "listening on")):
+            server_is_ready = True
         if "offloaded" in raw_text and "layers to CPU" in raw_text:
             m = re.search(r'offloaded\s+(\d+)\s+layers to CPU', raw_text)
             if m:
@@ -713,22 +716,25 @@ def main():
                 print()
             break
 
-        try:
-            req = urllib.request.Request(f"http://127.0.0.1:{PORT}/slots", headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=0.8) as resp:
-                slots = json.loads(resp.read().decode())
-                if slots and len(slots) > 0:
-                    s0 = slots[0]
-                    ready = True
-                    is_processing = s0.get('is_processing', False)
-                    if is_processing:
-                        n_prompt = s0.get('n_prompt_tokens', 0)
-                        n_processed = s0.get('n_prompt_tokens_processed', 0)
-                        used_ctx_tokens = max(n_prompt, n_processed)
-                    else:
-                        n_prompt = s0.get('n_prompt_tokens', 0)
-                        used_ctx_tokens = n_prompt
-        except Exception:
+        if server_is_ready:
+            try:
+                req = urllib.request.Request(f"http://127.0.0.1:{PORT}/slots", headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=0.8) as resp:
+                    slots = json.loads(resp.read().decode())
+                    if slots and len(slots) > 0:
+                        s0 = slots[0]
+                        ready = True
+                        is_processing = s0.get('is_processing', False)
+                        if is_processing:
+                            n_prompt = s0.get('n_prompt_tokens', 0)
+                            n_processed = s0.get('n_prompt_tokens_processed', 0)
+                            used_ctx_tokens = max(n_prompt, n_processed)
+                        else:
+                            n_prompt = s0.get('n_prompt_tokens', 0)
+                            used_ctx_tokens = n_prompt
+            except Exception:
+                ready = False
+        else:
             ready = False
 
         server_ram_mb = get_process_ram_mb(server_proc.pid) if server_proc else 150.0
