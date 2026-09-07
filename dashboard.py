@@ -182,6 +182,13 @@ def parse_cli_args(argv):
             meta["port"] = int(argv[2])
         if len(argv) > 3:
             passthrough_args.extend(argv[3:])
+    has_fit = any(a in ('-fit', '--fit') for a in argv)
+    has_explicit_ngl = any(a in ('-ngl', '--n-gpu-layers') for a in argv)
+    if has_fit and not has_explicit_ngl:
+        meta["ngl"] = None
+
+    if argv and not argv[0].startswith('-'):
+        pass
     else:
         i = 0
         while i < len(argv):
@@ -259,7 +266,10 @@ def parse_cli_args(argv):
     cmd = [
         server_bin,
         "-m", meta["model_file"],
-        "-ngl", str(meta["ngl"]),
+    ]
+    if meta.get("ngl") is not None and str(meta["ngl"]).lower() != "auto":
+        cmd.extend(["-ngl", str(meta["ngl"])])
+    cmd.extend([
         "-c", str(meta["context_limit"]),
         "-ctk", meta["ctk"],
         "-ctv", meta["ctv"],
@@ -273,7 +283,7 @@ def parse_cli_args(argv):
         "--cache-prompt",
         "--host", "127.0.0.1",
         "--port", str(meta["port"])
-    ]
+    ])
     cmd.extend(passthrough_args)
     return meta, cmd
 
