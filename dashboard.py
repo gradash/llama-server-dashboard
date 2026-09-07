@@ -236,6 +236,22 @@ def parse_cli_args(argv):
                 meta["fa"] = val
                 i += 2
                 continue
+            elif arg in ('-t', '--threads') and val:
+                meta["t"] = val
+                i += 2
+                continue
+            elif arg in ('-tb', '--threads-batch') and val:
+                meta["tb"] = val
+                i += 2
+                continue
+            elif arg in ('-np', '--parallel') and val:
+                meta["np"] = val
+                i += 2
+                continue
+            elif arg in ('-fa', '--flash-attn') and val:
+                meta["fa"] = val
+                i += 2
+                continue
             else:
                 passthrough_args.append(arg)
                 if val and i + 1 < len(argv) and argv[i+1] == val:
