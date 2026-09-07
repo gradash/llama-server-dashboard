@@ -318,6 +318,7 @@ def sync_active_model_to_omp(model_file, active_ctx):
         ("Qwen3.8-27B-UD-Q2_K_XL.gguf", "Qwen 3.8 27B (UD Q2_K_XL)", 65536),
         ("RVN-IQ2_M-multilingual-mtp.gguf", "RVN 27B MTP (IQ2_M Multilingual)", 65536),
         ("Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-IQ3_M.gguf", "Qwen 3.8 Turbo NEO-CODER 27B (IQ3_M MTP)", 32768),
+        ("Tiel-Coder-35B-A3B-UD-Q4_K_XL.gguf", "Tiel Coder 35B A3B (Q4_K_XL MoE)", 16384),
         ("gpt-oss-20b-UD-Q6_K_XL.gguf", "GPT-OSS 20B (UD Q6_K_XL)", 65536),
         ("gemma-4-31B-it-UD-IQ2_XXS.gguf", "Gemma 4 31B IT (UD-IQ2_XXS - 128k)", 131072),
         ("DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf", "DeepSeek Coder V2 Lite (Q4_K_M MoE)", 65536),
